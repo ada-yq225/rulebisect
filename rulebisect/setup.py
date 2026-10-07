@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -105,8 +106,40 @@ sys.exit(result.returncode if result.returncode in (0, 1) else 2)
     return path
 
 
-def doctor(repo: Path) -> dict:
-    checks = []
+def validate_configuration(repo: Path, config_path: Path, proposed: Path | None = None) -> dict:
+    """Reuse experiment validation without executing setup, verifier, or model commands."""
+    from .comparison import Comparison, suite_cases
+    from .experiment import Experiment
+
+    config = json.loads(config_path.read_text(encoding='utf-8'))
+    if not isinstance(config, dict):
+        raise ValueError('Config must be a JSON object')
+    out = repo.parent / f'rulebisect-preflight-{uuid.uuid4().hex}'
+    settings = (config.get('model'), config.get('repeats', 3),
+                config.get('max_runs', 60), config.get('timeout', 300))
+    if proposed is not None:
+        comparison = Comparison(repo, config, out, *settings, proposed,
+                                max_tokens=config.get('max_tokens'))
+        scope = comparison.prepare(check_codex=False)
+    else:
+        cases = suite_cases(config)
+        for name, case in cases:
+            experiment = Experiment(repo, case, out, *settings,
+                                    max_tokens=config.get('max_tokens'))
+            try:
+                experiment.prepare(materialize=False, check_codex=False)
+            except (ValueError, OSError) as error:
+                raise ValueError(f'Case {name}: {error}') from error
+        scope = {'instruction_files': experiment.instruction_paths, 'units': len(experiment.rules),
+                 'snapshot_files': len(experiment.blobs), 'cases': [name for name, _ in cases],
+                 'comparison_calls': len(cases) * 2 * experiment.repeats,
+                 'max_runs': experiment.max_runs, 'model_calls': 0}
+    return scope
+
+
+def doctor(repo: Path, *, offline: bool = False, config_path: Path | None = None,
+           proposed: Path | None = None) -> dict:
+    checks, warnings, scope = [], [], None
     def add(name, ok, detail):
         checks.append({'name': name, 'ok': ok, 'detail': detail})
     add('Python', sys.version_info >= (3, 11), sys.version.split()[0])
@@ -114,41 +147,44 @@ def doctor(repo: Path) -> dict:
     try:
         root = git_root(repo)
         add('Git repository', True, str(root))
-        files = discover_instructions(root)
-        config = root / CONFIG_NAME
+        config = config_path or root / CONFIG_NAME
+        add('Experiment config', config.is_file(), str(config) if config.is_file() else 'Run rulebisect init')
         if config.is_file():
             try:
+                scope = validate_configuration(root, config, proposed)
+                add('Experiment inputs', True, 'Snapshot, instruction files, verifier roles and budgets validated')
                 configured = json.loads(config.read_text(encoding='utf-8'))
-                selected = configured.get('instructions', []) if isinstance(configured, dict) else []
-                if isinstance(selected, list) and selected:
-                    files = [name for name in selected if isinstance(name, str) and not Path(name).is_absolute()
-                             and '..' not in Path(name).parts and (root / name).is_file()
-                             and not (root / name).is_symlink() and (root / name).resolve().is_relative_to(root)]
-                    add('Configured instructions', len(files) == len(selected), ', '.join(files) or 'Configured files missing')
-                else:
-                    add('Configured instructions', False, 'Config needs a non-empty instructions list')
-            except (ValueError, OSError) as error:
-                add('Config syntax', False, str(error))
+                if not configured.get('model'):
+                    warnings.append('No saved model; choose --model MODEL when running.')
+                if proposed is None and scope['comparison_calls'] > scope['max_runs']:
+                    warnings.append(f"Comparison needs {scope['comparison_calls']} calls; saved max_runs is {scope['max_runs']}. Increase it before compare.")
+                if scope.get('setup') or configured.get('setup'):
+                    warnings.append('Setup was validated but not executed; use rulebisect check to test the environment.')
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                add('Experiment inputs', False, str(error))
         else:
+            files = discover_instructions(root)
             add('Instruction files', bool(files), ', '.join(files) or 'None found; select files with init --instructions')
-        add('Experiment config', config.is_file(), str(config) if config.is_file() else 'Run rulebisect init')
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         add('Git repository', False, str(error))
-    if not shutil.which('codex'):
-        add('Codex executable', False, 'Install the Codex CLI')
-    else:
-        try:
-            version = subprocess.run(['codex', '--version'], capture_output=True, text=True, timeout=10, check=True)
-            add('Codex version', True, version.stdout.strip())
-            help_text = subprocess.run(['codex', 'exec', '--help'], capture_output=True, text=True, timeout=10, check=True).stdout
-            missing = [flag for flag in ['--json', '--ephemeral', '--ignore-user-config'] if flag not in help_text]
-            add('Codex flags', not missing, 'Supported' if not missing else 'Update Codex; missing ' + ', '.join(missing))
-            auth = subprocess.run(['codex', 'login', 'status'], capture_output=True, timeout=10)
-            # Do not print authentication output, which may include an API-key hint.
-            add('Codex authentication', auth.returncode == 0, 'Logged in' if auth.returncode == 0 else 'Run codex login')
-        except (OSError, subprocess.SubprocessError) as error:
-            add('Codex check', False, str(error))
-    return {'ok': all(c['ok'] for c in checks), 'checks': checks, 'model_calls': 0}
+    if not offline:
+        if not shutil.which('codex'):
+            add('Codex executable', False, 'Install the Codex CLI, or use doctor --offline to check only repository inputs')
+        else:
+            try:
+                version = subprocess.run(['codex', '--version'], capture_output=True, text=True, timeout=10, check=True)
+                add('Codex version', True, version.stdout.strip())
+                help_text = subprocess.run(['codex', 'exec', '--help'], capture_output=True, text=True, timeout=10, check=True).stdout
+                missing = [flag for flag in ['--json', '--ephemeral', '--ignore-user-config'] if flag not in help_text]
+                add('Codex flags', not missing, 'Supported' if not missing else 'Update Codex; missing ' + ', '.join(missing))
+                auth = subprocess.run(['codex', 'login', 'status'], capture_output=True, timeout=10)
+                # Never print authentication output, which may include an API-key hint.
+                add('Codex authentication', auth.returncode == 0, 'Logged in' if auth.returncode == 0 else 'Run codex login')
+            except (OSError, subprocess.SubprocessError) as error:
+                add('Codex check', False, str(error))
+    return {'ok': all(c['ok'] for c in checks), 'checks': checks, 'warnings': warnings,
+            'scope': scope, 'offline': offline, 'model_calls': 0,
+            'executed_setup': False, 'executed_verifier': False}
 
 
 def draft_instructions(repo: Path, out: Path) -> Path:

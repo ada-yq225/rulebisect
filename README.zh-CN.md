@@ -59,6 +59,18 @@ rulebisect demo --scenario reduce --out ../rulebisect-demo --open
 
 这是明确标注的**确定性模拟案例**，不是实际 Codex 效果的证明。
 
+## 调用模型前先排除配置错误
+
+```sh
+rulebisect doctor --offline
+rulebisect doctor --offline --proposed ../proposed-rules
+rulebisect doctor --config experiment.json --json
+```
+
+现在 `doctor` 会检查快照输入、指令文件、验证器与保护文件、全部回归用例和预算。加上 `--proposed` 后，也会检查修改后的文件与整个对比所需调用数。无效输入返回退出码 2；未提供 proposed 时，对比预算不足只提示，因为同一配置可能用于缩减实验。
+
+`--offline` 跳过 Codex 安装和登录检查，适合离线准备配置。两种模式都不调用模型、不执行 setup 或验证器，也不生成实验文件。输入检查通过后，用 `check` 实际检查依赖与验证命令。没有保存模型只提示，可在正式运行时用 `--model` 指定。
+
 ## 常用功能
 
 | 命令 / 选项 | 用途 | 调用模型 |

@@ -61,6 +61,18 @@ rulebisect demo --scenario reduce --out ../rulebisect-demo --open
 
 Open `../rulebisect-demo/report.html`. This is an explicitly labeled **deterministic simulator** that reduces five paragraph units to two interacting format rules. It tests the experiment pipeline, not real model behavior.
 
+## Catch setup mistakes before using model quota
+
+```sh
+rulebisect doctor --offline
+rulebisect doctor --offline --proposed ../proposed-rules
+rulebisect doctor --config experiment.json --json
+```
+
+Doctor validates the frozen-snapshot inputs, selected instruction files, verifier/protected roles, every suite case and saved budgets. `--proposed` also validates the proposed files and requires enough calls for the whole comparison. It returns exit 2 for invalid inputs. Without a proposed directory, a comparison budget shortage is a note because the configuration may still be used for reduction.
+
+`--offline` skips Codex installation and login checks; normal doctor checks both without making model calls. Neither mode executes setup commands or the verifier, creates experiment evidence, or establishes that your tests will run successfully. Use `check` next to exercise the environment. Missing saved model is a note: you can select it with `--model` when running.
+
 ## Commands and controls
 
 | Command | Purpose | Model calls |

@@ -1,3 +1,13 @@
+# Validation — v0.4.2
+
+Executed on macOS, 2026-10-07.
+
+- All 67 automated checks passed on Python 3.11.15. Added doctor coverage for malformed JSON, invalid file roles/budgets, all suite cases, proposed-file comparison budgets, custom configuration, source preservation and authentication-output redaction.
+- Offline validation subprocesses were observed: only Git queries ran, with no setup, verifier or Codex execution and no preflight artifacts created.
+- Built and installed the wheel; the installed CLI outside the checkout validated the instruction-regression fixture with a custom config and proposed files, reporting exactly eight required comparison calls and zero model calls.
+- No real Codex/model calls were made for this release. Static input validation does not establish that dependencies or verifier commands execute successfully; use check for that.
+- Cross-platform CI results are recorded in GitHub Actions for the current revision.
+
 # Validation — v0.4.1
 
 Executed on macOS, 2026-10-07.

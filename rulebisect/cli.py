@@ -81,6 +81,9 @@ def main(argv=None) -> int:
     doc = commands.add_parser('doctor', help='Check Python, Git, Codex and login without model calls')
     doc.add_argument('--repo', type=Path, default=Path.cwd())
     doc.add_argument('--json', action='store_true')
+    doc.add_argument('--offline', action='store_true', help='Validate repository inputs without checking Codex or login')
+    doc.add_argument('--config', type=Path, help='Use a custom experiment config')
+    doc.add_argument('--proposed', type=Path, help='Also validate a proposed instruction directory and exact comparison budget')
     inspect = commands.add_parser('inspect', help='Inspect the instruction units; no model calls')
     inspect.add_argument('files', nargs='*', type=Path)
     inspect.add_argument('--repo', type=Path, default=Path.cwd())
@@ -144,13 +147,18 @@ def main(argv=None) -> int:
             print('Tracked test files were added to protected_files. Review this list and the selected instruction files.')
             return 0
         if args.command == 'doctor':
-            result = doctor(args.repo)
+            result = doctor(args.repo, offline=args.offline, config_path=args.config, proposed=args.proposed)
             if args.json:
                 print(json.dumps(result, ensure_ascii=False, indent=2))
             else:
                 for value in result['checks']:
                     print(f"{'OK' if value['ok'] else 'FIX'}  {value['name']}: {value['detail']}")
-                print('No model calls / 不消耗模型额度')
+                for warning in result['warnings']:
+                    print(f'NOTE  {warning}')
+                if result['scope']:
+                    scope = result['scope']
+                    print(f"Cases: {', '.join(scope['cases'])}; comparison calls: {scope.get('required_calls', scope.get('comparison_calls'))}; cap: {scope['max_runs']}")
+                print('No model calls; setup and verifier not executed / 不消耗模型额度，不执行验证器')
             return 0 if result['ok'] else 2
         if args.command == 'inspect':
             files = args.files

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2
+
+- Doctor now validates experiment snapshots, verifier roles, instruction units, all suite cases and saved budgets using the same checks as actual experiments.
+- Added doctor --offline, --config and --proposed for no-Codex input checks and exact comparison-budget validation.
+- Added structured scope summaries and actionable notes; doctor never runs setup or verifier commands.
+- Added configuration, no-execution and authentication-output privacy regression coverage.
+
 ## 0.4.1
 
 - Added zero-model regression and scoped-fix demos, alongside instruction reduction.
