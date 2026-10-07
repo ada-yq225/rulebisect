@@ -80,8 +80,8 @@ def write_report(out: Path, report: dict) -> None:
         if 'number' not in trial:
             continue
         prefix = f"trials/{trial['number']:04d}"
-        links = [f'<a href="{prefix}/agent.log">Agent log</a>', f'<a href="{prefix}/trial.json">JSON</a>']
-        for name, title in [('verify.log', 'Verifier log'), ('changes.diff', 'Code diff')]:
+        links = [f'<a href="{prefix}/trial.json">JSON</a>']
+        for name, title in [('agent.log', 'Agent log'), ('setup.log', 'Setup log'), ('verify.log', 'Verifier log'), ('changes.diff', 'Code diff')]:
             if (out / prefix / name).exists():
                 links.append(f'<a href="{prefix}/{name}">{title}</a>')
         reason = trial.get('reason', '')
@@ -90,7 +90,7 @@ def write_report(out: Path, report: dict) -> None:
         trials.append(f'<details><summary>#{trial["number"]} · {e(trial["phase"])} · {e(trial["outcome"])} · {e(reason)}</summary>'
                       f'<p>{" · ".join(links)}</p><pre>{e(str(trial.get("changed_files", [])))}</pre>' + inline_diff + '</details>')
     experiment = {key: report.get(key) for key in ('task', 'requested_model', 'codex_version', 'snapshot_sha256',
-                  'repeats', 'max_runs', 'max_tokens', 'timeout_seconds', 'protected_files', 'unit_mode')}
+                  'repeats', 'max_runs', 'max_tokens', 'timeout_seconds', 'protected_files', 'unit_mode', 'setup')}
     totals = report['usage_totals']
     total_tokens = totals['input_tokens'] + totals['output_tokens']
     token_label = f'{total_tokens:,}' if totals['reported_runs'] else '未上报 / —'
@@ -102,7 +102,10 @@ def write_report(out: Path, report: dict) -> None:
             comparisons += f'<div class="stat">{name}<strong>{value["pass"]} pass / {value["fail"]} fail</strong></div>'
     check = ''
     if report.get('verifier_check'):
-        check = '<p>Verifier result: ' + e(str(report['verifier_check'])) + ' · <a href="check.log">Check log</a></p>'
+        link = ' · <a href="check.log">Check log</a>' if (out / 'check.log').is_file() else ''
+        check = '<p>Verifier result: ' + e(str(report['verifier_check'])) + link + '</p>'
+    if report.get('setup_check') and not report['setup_check'].get('skipped'):
+        check += '<p>Environment setup: ' + e(str(report['setup_check'])) + ' · <a href="setup.log">Setup log</a></p>'
     document = '''<!doctype html><html lang="zh-CN"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>RuleBisect · 实验报告</title>
 <style>body{background:#101419;color:#e8edf3;font:16px system-ui;margin:0}main{max-width:1050px;margin:auto;padding:44px 24px}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+- Added optional per-workspace dependency setup, init --setup, setup logs, and no-model environment checking.
+- Stop before Codex when setup fails, times out or changes snapshot content; include setup in resume matching.
+- Retain new non-ignored file diffs and deleted file content; exclude files created by setup and mark missing final newlines.
+- Reject symlink ancestors in snapshot paths.
+- Expanded regression coverage for setup isolation, failure accounting and file evidence.
+
 ## 0.2.0
 
 - Added init, doctor, plan, check, resume and report commands; saved settings and automatic output paths.

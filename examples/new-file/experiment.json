@@ -1,0 +1,23 @@
+{
+  "task": "Create labels.py with normalize_label(value: str) returning value.strip().lower(). First confirm dependency.txt contains ready. Do not edit existing files.",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "oracle": "verify.py",
+  "verify": [
+    "{python}",
+    "{oracle}"
+  ],
+  "protected_files": [
+    "verify.py",
+    ".gitignore"
+  ],
+  "setup": [
+    "{python}",
+    "-c",
+    "from pathlib import Path; Path(\"dependency.txt\").write_text(\"ready\")"
+  ],
+  "repeats": 2,
+  "max_runs": 4,
+  "timeout": 90
+}

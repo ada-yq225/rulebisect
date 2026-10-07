@@ -36,13 +36,18 @@ def discover_instructions(repo: Path) -> list[str]:
 
 
 def init_config(repo: Path, task: str, check: str | None, model: str | None,
-                oracle: str | None = None, instructions: list[str] | None = None) -> Path:
+                oracle: str | None = None, instructions: list[str] | None = None, setup: str | None = None) -> Path:
     repo = repo.resolve()
     path = repo / CONFIG_NAME
     if path.exists():
         raise ValueError(f'{CONFIG_NAME} already exists; edit it rather than overwriting.')
     if not task.strip():
         raise ValueError('Provide a concrete --task.')
+    setup_argv = shlex.split(setup) if setup is not None else []
+    if setup is not None and (not setup_argv or any(v in ('&&', '||', ';', '|', '>', '>>', '<') for v in setup_argv)):
+        raise ValueError('--setup requires a command without shell operators; use a script for multiple steps.')
+    if setup_argv and setup_argv[0] in ('python', 'python3'):
+        setup_argv[0] = '{python}'
     selected = instructions or discover_instructions(repo)
     if not selected:
         raise ValueError('No AGENTS.md found. Use --instructions to select an existing instruction/Skill file.')
@@ -92,6 +97,8 @@ sys.exit(result.returncode if result.returncode in (0, 1) else 2)
     config = {'task': task, 'instructions': selected, 'oracle': oracle,
               'verify': ['{python}', '{oracle}'], 'protected_files': sorted(set(protected + [oracle])),
               'repeats': 3, 'max_runs': 60, 'timeout': 300, 'unit_mode': 'paragraph'}
+    if setup_argv:
+        config['setup'] = setup_argv
     if model:
         config['model'] = model
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

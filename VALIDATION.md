@@ -1,4 +1,19 @@
-# Validation — v0.2.0
+# Validation — v0.3.0
+
+Executed on macOS, 2026-10-07. Constructed fixtures; no real-world defect claim.
+
+- 36 regression tests passed on Python 3.11.15, followed by three additional passing checks for invalid setup arguments, internal symlink ancestors and setup timeout (39 checks), followed by a passing large-file evidence regression (40 total checks).
+- Wheel built and installed in a clean Python 3.11 virtual environment; installed CLI demo completed all 48 simulator executions.
+- Setup success, failure and snapshot mutation tested. Failed or timed-out setup skips the agent and produces an inconclusive result.
+- New/deleted file diffs, missing final newlines, ignored output and setup-created dependency exclusions checked; original source preserved.
+- Two actual authenticated local Codex executions, CLI 0.159.2, requested model gpt-6.1-sol. A workspace setup command created an ignored dependency marker; Codex then created labels.py. Both independent verifier checks passed, so status was not_reproduced and reduction did not start.
+- Both trials retained the newly created labels.py diff; setup output was excluded. No labels.py or dependency marker was written into the original repository.
+- Reported input tokens: 92227; output: 522; cached input: 79104. Cached input is already included in input. No dollar cost inferred.
+- Reproducible fixture: examples/new-file. Supply your available model explicitly. Raw logs remain outside this repository.
+- Previous v0.2 passed all six GitHub CI jobs (Linux/macOS/Windows, Python 3.11/3.13): https://github.com/ada-yq225/rulebisect/actions/runs/37577224909. Current revision CI is recorded by GitHub after pushing.
+- Setup does not freeze remote dependencies or external services. New ignored files are not recorded. Copies remain local workspaces, not containers.
+
+# Earlier validation — v0.2.0
 
 Executed on macOS, 2026-10-07. The tool is experimental; these are constructed fixtures, not reported real-world defects.
 

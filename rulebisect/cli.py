@@ -66,6 +66,7 @@ def main(argv=None) -> int:
     init.add_argument('--repo', type=Path, default=Path.cwd())
     init.add_argument('--task', required=True)
     init.add_argument('--model')
+    init.add_argument('--setup', help='Quoted environment command executed before every trial, e.g. "npm ci"')
     verifier = init.add_mutually_exclusive_group(required=True)
     verifier.add_argument('--check', help='Quoted command, e.g. "python -m unittest discover -s tests"; no shell expansion')
     verifier.add_argument('--oracle', help='Existing repository-relative Python verifier (exit 0/1/2+)')
@@ -97,7 +98,7 @@ def main(argv=None) -> int:
     try:
         if args.command == 'init':
             repo = git_root(args.repo)
-            path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions)
+            path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup)
             print(f'Created {path}\nNext: rulebisect plan\nThen: rulebisect check (test the verifier without Codex)\nFinally: rulebisect run')
             if not args.model:
                 print('Choose --model MODEL when running, or add model to the config.')
@@ -146,7 +147,7 @@ def main(argv=None) -> int:
                 result = {'model': experiment.model, 'instruction_files': experiment.instruction_paths,
                           'units': n, 'unit_mode': experiment.report['unit_mode'], 'snapshot_files': len(experiment.blobs),
                           'snapshot_bytes': sum(len(v[0]) for v in experiment.blobs.values()),
-                          'protected_files': experiment.protected, 'repeats': experiment.repeats,
+                          'protected_files': experiment.protected, 'setup': experiment.config.get('setup', []), 'repeats': experiment.repeats,
                           'minimum_baseline_calls': 2 * experiment.repeats, 'max_runs': experiment.max_runs,
                           'confirmation_calls_if_all_units_retained': (n + 1) * experiment.repeats,
                           'max_tokens': experiment.max_tokens, 'output': str(out), 'model_calls': 0}

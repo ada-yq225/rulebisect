@@ -67,11 +67,23 @@ rulebisect run --unit-mode file
 
 - `--max-runs` is a hard total execution cap.
 - `--max-tokens` stops before the next call once reported input + output tokens reach the limit. A single in-flight call can exceed it; unreported usage cannot be counted. Cached input is already part of input. This is **not a dollar/billing cap**.
-- `--timeout` bounds each agent/verifier process.
+- `--timeout` bounds each setup, agent and verifier process.
 - Repetitions default to 3; at least 2 are required.
 - `--unit-mode paragraph` is the default; `section` preserves heading sections, `file` starts with whole instruction files. Fenced code stays together. Removing paragraphs/headings can change document structure.
 
 Options can be saved as `repeats`, `max_runs`, `max_tokens`, `timeout`, `unit_mode`, `model` in `.rulebisect.json`; CLI options override them.
+
+## Prepare dependencies automatically
+
+Add `--setup "npm ci"` to `init`, or set an argv array in `.rulebisect.json`:
+
+```json
+"setup": ["{python}", "prepare_environment.py"]
+```
+
+Setup runs in every fresh workspace before Codex, and during `check`. Use it to install locked dependencies or create a local virtual environment. It uses the same process timeout; logs are saved as `setup.log`. Commands run without a shell: put multiple steps in a script. `{python}` selects RuleBisect's interpreter.
+
+Setup must preserve snapshot files (including the selected instructions and verifier). A failure, timeout or snapshot content change stops the experiment before a model call. Existing installed dependencies are not copied, and setup does not pin network services or prevent changes to your machine. Keep generated dependencies ignored; prefer workspace-local installs. Resume also requires the same setup command.
 
 ## A precise verifier
 
@@ -117,11 +129,11 @@ Empty selected files remain present, affecting instruction fallback/loading. The
 rulebisect resume --from /old/evidence --max-runs 100
 ```
 
-The cap includes previous executions. Resume checks tool/CLI version, requested model, snapshot content and modes, task, verifier/protected roles, instruction units, repeats, timeout and agent command. Changed inputs are rejected. It copies old trial logs to a **new** evidence directory and reuses only completed stable search groups. Baselines and final confirmation run afresh. Unrecorded environment changes remain possible; reuse is not proof of identical environments. Old v0.1 evidence can be rendered but cannot be resumed as a v0.2 experiment.
+The cap includes previous executions. Resume checks tool/CLI version, requested model, snapshot content and modes, task, verifier/protected roles, instruction units, repeats, timeout, setup and agent command. Changed inputs are rejected. It copies old trial logs to a **new** evidence directory and reuses only completed stable search groups. Baselines and final confirmation run afresh. Unrecorded environment changes remain possible; reuse is not proof of identical environments. Evidence from older tool versions can be rendered but cannot be resumed across a version change.
 
 ## Read and share evidence
 
-The offline HTML report includes bilingual status/next steps, full-vs-empty control counts, searchable instruction cards, a retained-only filter, reported token usage, and per-run agent/verifier logs. Source changes survive workspace cleanup as `changes.diff` for snapshotted non-instruction files; new files are not captured and large/binary changes list filenames only.
+The offline HTML report includes bilingual status/next steps, full-vs-empty control counts, searchable instruction cards, a retained-only filter, reported token usage, and per-run agent/verifier logs. Source changes survive workspace cleanup as `changes.diff`: edits, deletions and non-ignored new files are captured. Large/binary changes list filenames only. Dependency files created by setup are excluded from new-file evidence; ignored new files are excluded.
 
 Other exports: JSON, Markdown, candidate instruction files, a **review-only** `candidate.patch`, and an `issue.md` draft that omits task text, instruction bodies and raw logs by default. No changes are automatically applied and no issue is posted. Review all exports for private content before sharing.
 
@@ -129,7 +141,7 @@ Statuses: `observed_1_minimal`, `not_reproduced`, `control_failed`, `inconclusiv
 
 ## Local execution boundaries
 
-The source repository is never modified by experiments. Setup intentionally adds its two configuration files. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
+The source repository is never modified by experiments. `init` intentionally adds configuration and, when using --check, a verifier wrapper. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
 
 Copies are not containers or a security boundary. Codex runs with `workspace-write`, `approval_policy="never"`, `--ephemeral`, `--ignore-user-config`; verifier commands run with your local account. Use trusted repositories/checks only. Global instructions, project configuration, imports, network services and tool versions can affect behavior. POSIX timeouts terminate the process group; Windows currently terminates the direct process only. Full reports, diffs and logs may contain private code/output.
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import sys
 import difflib
@@ -33,7 +34,7 @@ class Experiment:
                        "limitations": ["Finite repeated observations; no causal or statistical-confidence claim.",
                                        "1-minimal means no tested single removal preserves failure, not globally smallest.",
                                        "Only explicitly selected paragraph units are varied; external instructions remain fixed.",
-                                       "Snapshot is tracked working files, not dependencies, Git history or a security boundary."]}
+                                       "Snapshot is tracked working files; setup dependencies are recreated, not pinned. No Git history or security boundary."]}
 
     def relative(self, value: str) -> str:
         if not isinstance(value, str) or not value:
@@ -41,7 +42,7 @@ class Experiment:
         path = Path(value)
         if path.is_absolute() or ".." in path.parts or ".git" in path.parts:
             raise ValueError(f"Expected a repository-relative path: {value}")
-        if (self.repo / path).is_symlink() or not (self.repo / path).resolve().is_relative_to(self.repo):
+        if any((self.repo / Path(*path.parts[:i])).is_symlink() for i in range(1, len(path.parts) + 1)) or not (self.repo / path).resolve().is_relative_to(self.repo):
             raise ValueError(f"Symlinks and paths outside the repository are unsupported: {value}")
         return path.as_posix()
 
@@ -69,6 +70,10 @@ class Experiment:
             raise ValueError("verify must be an argument array, not a shell string")
         if "{oracle}" not in verify:
             raise ValueError("verify must reference {oracle}, an immutable verifier copy")
+        setup = self.config.get("setup", [])
+        if not isinstance(setup, list) or any(not isinstance(v, str) or not v for v in setup):
+            raise ValueError("setup must be an argument array of non-empty strings, not a shell string")
+        self.report["setup"] = setup
         oracle = self.relative(self.config.get("oracle", ""))
         if not (self.repo / oracle).is_file():
             raise ValueError("oracle must be an existing file")
@@ -139,7 +144,7 @@ class Experiment:
         if previous_root == self.out or self.out.is_relative_to(previous_root):
             raise ValueError("Resume output must be a new directory outside the previous evidence")
         previous = json.loads((previous_root / "report.json").read_text())
-        for key in ("version", "runner", "requested_model", "codex_version", "snapshot_sha256", "task", "rules", "verify", "oracle", "protected_files", "repeats", "timeout_seconds", "unit_mode", "agent_command"):
+        for key in ("version", "runner", "requested_model", "codex_version", "snapshot_sha256", "task", "rules", "verify", "oracle", "protected_files", "repeats", "timeout_seconds", "unit_mode", "agent_command", "setup"):
             if previous.get(key) != self.report.get(key):
                 raise ValueError(f"Cannot reuse evidence: {key} changed")
         if len(previous["trials"]) >= self.max_runs:
@@ -169,8 +174,10 @@ class Experiment:
             workspace = Path(temporary) / "repo"
             workspace.mkdir()
             self.workspace(workspace, [r.id for r in self.rules])
-            result = run_process(self.verify_command(), workspace, self.out / "check.log", self.timeout)
-        self.report.update(status="check_only", message="Verifier executed on the initial snapshot. No Codex or model calls made.", verifier_check=result)
+            setup = self.setup_workspace(workspace, self.out / "setup.log", [r.id for r in self.rules])
+            self.report["setup_check"] = setup
+            result = run_process(self.verify_command(), workspace, self.out / "check.log", self.timeout) if setup.get("exit_code") == 0 else {"exit_code": 2, "reason": "Environment setup failed; see setup.log"}
+        self.report.update(status="check_only", message="Initial snapshot check completed. No Codex or model calls made; inspect setup/check results.", verifier_check=result)
         write_report(self.out, self.report)
         return result
 
@@ -190,6 +197,67 @@ class Experiment:
         subprocess.run(["git", "init", "-q"], cwd=path, check=True, timeout=10,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 
+    def setup_workspace(self, workspace, log, ids):
+        argv = self.config.get("setup", [])
+        if not argv:
+            return {"exit_code": 0, "skipped": True}
+        argv = [sys.executable if v == "{python}" else v for v in argv]
+        result = run_process(argv, workspace, log, self.timeout)
+        if result.get("exit_code") == 0:
+            selected = set(ids)
+            changed = []
+            for name, (data, _) in self.blobs.items():
+                if name in self.instruction_paths:
+                    data = ''.join(r.text for r in self.rules if r.path == name and r.id in selected).encode('utf-8')
+                target = workspace / name
+                if target.is_symlink() or not target.resolve().is_relative_to(workspace.resolve()) or not target.is_file() or target.read_bytes() != data:
+                    changed.append(name)
+            if changed:
+                result.update(exit_code=2, reason="Setup changed snapshot files", changed_files=changed)
+        return result
+
+    def untracked_files(self, workspace):
+        output = subprocess.run(['git', '-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard', '-z'],
+                                cwd=workspace, capture_output=True, timeout=10, check=True).stdout
+        return set(name for name in output.decode().split('\0') if name) - set(self.blobs)
+
+    def collect_changes(self, workspace, artifact, initial_untracked):
+        changes, diffs = [], []
+        new_files = self.untracked_files(workspace) - initial_untracked
+        for name in sorted(set(self.blobs) | new_files):
+            if name in self.instruction_paths:
+                continue
+            target = workspace / name
+            before = self.blobs.get(name, (b'', 0))[0]
+            safe = not target.is_symlink() and target.resolve().is_relative_to(workspace.resolve())
+            if safe and target.is_file():
+                # Bound the diff read; large/binary files still appear in the manifest.
+                after = target.read_bytes() if target.stat().st_size < 200000 else None
+                if name in self.blobs:
+                    if after is None:
+                        fingerprint = hashlib.sha256()
+                        with target.open('rb') as stream:
+                            for chunk in iter(lambda: stream.read(65536), b''):
+                                fingerprint.update(chunk)
+                        if fingerprint.hexdigest() == digest(before):
+                            continue
+                    elif after == before:
+                        continue
+                kind = 'added' if name in new_files else 'modified'
+            else:
+                after = b''
+                kind = 'deleted' if not target.exists() and not target.is_symlink() else 'unsupported'
+            changes.append({'path': name, 'kind': kind})
+            if kind != 'unsupported' and after is not None and len(before) + len(after) < 200000 and b'\x00' not in before + after:
+                lines = difflib.unified_diff(before.decode('utf-8', errors='replace').splitlines(True), after.decode('utf-8', errors='replace').splitlines(True),
+                    fromfile='/dev/null' if kind == 'added' else 'before/' + name,
+                    tofile='/dev/null' if kind == 'deleted' else 'after/' + name)
+                for line in lines:
+                    diffs.append(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n')
+        if diffs:
+            (artifact / 'changes.diff').write_text(''.join(diffs), encoding='utf-8')
+        return changes
+
     def trial(self, ids: list[int], phase: str) -> dict:
         number = len(self.report["trials"]) + 1
         artifact = self.out / "trials" / f"{number:04d}"
@@ -203,10 +271,16 @@ class Experiment:
             workspace = Path(temporary) / "repo"
             workspace.mkdir()
             self.workspace(workspace, ids)
+            record["setup"] = self.setup_workspace(workspace, artifact / "setup.log", ids)
+            initial_untracked = self.untracked_files(workspace)
             argv = self.runner or codex_command(self.model)
-            record["agent"] = run_process(argv, workspace, artifact / "agent.log", self.timeout,
-                                          None if self.runner else self.config["task"])
-            if self.runner is None:
+            if record["setup"].get("exit_code") == 0:
+                record["agent"] = run_process(argv, workspace, artifact / "agent.log", self.timeout,
+                                              None if self.runner else self.config["task"])
+            else:
+                record["agent"] = {"skipped": True}
+                record["reason"] = record["setup"].get("reason", "Environment setup failed or timed out")
+            if self.runner is None and not record["agent"].get("skipped"):
                 record["codex"] = codex_metadata(artifact / "agent.log")
             if record["agent"].get("exit_code") == 0:
                 changed = []
@@ -229,24 +303,10 @@ class Experiment:
                         record["outcome"] = "pass" if code == 0 else "fail"
                     else:
                         record["reason"] = "Verifier error: use exit 0=pass, 1=behavioral failure, 2+=setup error"
-            else:
+            elif not record["agent"].get("skipped"):
                 record["reason"] = "Agent execution failed or timed out; not classified as task failure"
-            changes = []
-            for name, (data, _) in self.blobs.items():
-                if name in self.instruction_paths:
-                    continue
-                target = workspace / name
-                if target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(workspace.resolve()):
-                    after = target.read_bytes()
-                    if after != data:
-                        changes.append(name)
-                        if len(data) + len(after) < 200000 and b'\x00' not in data + after:
-                            diff = ''.join(difflib.unified_diff(data.decode('utf-8', errors='replace').splitlines(True), after.decode('utf-8', errors='replace').splitlines(True), fromfile='before/' + name, tofile='after/' + name))
-                            with (artifact / 'changes.diff').open('a', encoding='utf-8') as stream:
-                                stream.write(diff)
-                else:
-                    changes.append(name)
-            record["changed_files"] = changes
+            record["file_changes"] = self.collect_changes(workspace, artifact, initial_untracked)
+            record["changed_files"] = [v['path'] for v in record["file_changes"]]
         record["state"] = "completed"
         (artifact / "trial.json").write_text(json.dumps(record, indent=2) + "\n")
         write_report(self.out, self.report)
