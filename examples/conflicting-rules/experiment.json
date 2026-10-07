@@ -1,0 +1,14 @@
+{
+  "task": "Create result.json with a single format field, choosing the output format according to the repository guidelines. If no guidelines specify a format, use modern.",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "oracle": "verify.py",
+  "verify": [
+    "python3",
+    "{oracle}"
+  ],
+  "protected_files": [
+    "verify.py"
+  ]
+}

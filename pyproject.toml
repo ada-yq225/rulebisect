@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rulebisect"
+version = "0.2.0"
+description = "Reduce reproducible Codex instruction failures to an observed minimal subset."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "RuleBisect contributors"}]
+classifiers = ["Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Topic :: Software Development :: Testing"]
+
+[project.urls]
+Repository = "https://github.com/ada-yq225/rulebisect"
+Issues = "https://github.com/ada-yq225/rulebisect/issues"
+
+[project.scripts]
+rulebisect = "rulebisect.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["rulebisect*"]

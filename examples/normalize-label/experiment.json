@@ -1,0 +1,18 @@
+{
+  "task": "Implement normalize_label in labels.py. Lowercase letters and handle whitespace using the repository conventions.",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "oracle": "verify.py",
+  "verify": [
+    "{python}",
+    "{oracle}"
+  ],
+  "protected_files": [
+    "verify.py"
+  ],
+  "repeats": 2,
+  "max_runs": 18,
+  "timeout": 90,
+  "unit_mode": "paragraph"
+}
