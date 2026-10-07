@@ -184,3 +184,14 @@ class ComparisonTests(unittest.TestCase):
         (self.repo / 'verify.py').write_text('from pathlib import Path\nPath("verifier-output.txt").write_text("check output")\nraise SystemExit(0)')
         report = self.comparison().execute()
         self.assertTrue(all('verifier-output.txt' not in t['changed_files'] for t in report['trials']))
+
+    @unittest.skipIf(sys.platform == 'win32', 'POSIX permission bits')
+    def test_readonly_source_produces_editable_draft(self):
+        from rulebisect.setup import draft_instructions
+        source = self.repo / 'AGENTS.md'
+        source.chmod(0o400)
+        target = self.root / 'draft'
+        draft_instructions(self.repo, target)
+        self.assertTrue((target / 'AGENTS.md').stat().st_mode & 0o200)
+        self.assertFalse(source.stat().st_mode & 0o200)
+        (target / 'AGENTS.md').write_text('editable copy')

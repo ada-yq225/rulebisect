@@ -175,5 +175,5 @@ def draft_instructions(repo: Path, out: Path) -> Path:
         target = out / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
-        target.chmod(mode)
+        target.chmod(mode | 0o200)  # The draft stays editable even if source instructions are read-only.
     return out
