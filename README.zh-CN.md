@@ -4,14 +4,33 @@
 
 永久免费、MIT 开源、只支持 Codex、无服务端和遥测。真实运行使用**你本机 Codex CLI 的登录身份和账户额度**；项目免费，模型调用仍可能产生费用。当前为实验性工具。
 
-## 最简单的开始方式
+## 先看效果：无需 Codex 账户
+
+按下面步骤安装后，直接运行：
+
+```sh
+rulebisect demo --scenario regression --open
+rulebisect demo --scenario fix --open
+```
+
+第一个演示“新规则修好现代标签，却破坏兼容标签”，第二个展示缩小规则范围后，两种契约都通过。每个演示执行 8 次确定性模拟，**模型调用为零**，报告在本地打开。重复体验自动使用不同输出目录。
+
+演示成功捕获预设回归时退出码为 0；真实 `compare` 发现回归仍返回 2，可以用于阻止错误修改。
+
+选择入口：**调查失败用 `run`，验证修改用 `draft` + `compare`，先体验用 `demo`**。真实任务需要可执行的通过/失败检查。
+
+## 安装并检查自己的仓库
 
 需要 Python 3.11+ 和 Git。安装并登录 Codex CLI，在源码目录安装：
 
 ```sh
 git clone https://github.com/ada-yq225/rulebisect.git
 cd rulebisect
-python3 -m pip install .
+python3 -m venv .venv
+# macOS / Linux：
+. .venv/bin/activate
+# Windows PowerShell 改用：.venv\Scripts\Activate.ps1
+python -m pip install .
 ```
 
 进入你要调查的 Git 仓库：
@@ -35,7 +54,7 @@ rulebisect run
 只想看效果、不想调用模型：
 
 ```sh
-rulebisect demo --out ../rulebisect-demo
+rulebisect demo --scenario reduce --out ../rulebisect-demo --open
 ```
 
 这是明确标注的**确定性模拟案例**，不是实际 Codex 效果的证明。
@@ -165,3 +184,5 @@ python3.11 -m unittest discover -s tests -v
 最有价值的贡献是可脱敏、可独立验证的真实失败案例。附模型和工具版本、任务、指令、验证条件与重复运行次数。
 
 相关方法已有 [LLM Delta Debugging](https://www.amazon.science/publications/delta-debugging-for-llm-integrated-systems) 和 [skill-eval-harness](https://github.com/adewale/skill-eval-harness)。本项目探索从仓库失败任务得到更小指令组合和本地证据的工作流，不宣称全球首创。
+
+参与开发或提交可复现案例：[贡献指南](CONTRIBUTING.md)。不需要模型账户就能运行完整自动化测试和演示。

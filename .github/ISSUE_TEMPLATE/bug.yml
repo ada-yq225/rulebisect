@@ -1,0 +1,22 @@
+name: Bug report
+description: Installation, CLI, experiment or report problem
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include expected behavior and the smallest command or fixture that reproduces it. Redact private content.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Versions and environment
+      description: OS, Python, rulebisect --version; Codex version if relevant. Never include auth files.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: A reviewed issue.md summary, traceback, or public fixture. Full reports may contain private code. Say whether this was a simulator or actual Codex.

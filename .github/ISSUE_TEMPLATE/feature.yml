@@ -1,0 +1,15 @@
+name: Workflow improvement
+description: A concrete developer problem or feature proposal
+body:
+  - type: textarea
+    id: pain
+    attributes:
+      label: What developer problem should this solve?
+      description: Describe your current workflow and where it gets difficult.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behavior
+      description: A command or before/after example helps; implementation ideas are optional.

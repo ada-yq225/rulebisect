@@ -12,7 +12,7 @@ from . import __version__
 from .comparison import Comparison
 from .history import history, latest_report
 from .core import split_rules
-from .demo import run_demo
+from .demo import run_demo, run_comparison_demo
 from .experiment import Experiment
 from .report import write_report
 from .setup import CONFIG_NAME, discover_instructions, doctor, draft_instructions, git_root, init_config
@@ -65,7 +65,10 @@ def main(argv=None) -> int:
     parser.add_argument('--version', action='version', version=__version__)
     commands = parser.add_subparsers(dest='command', required=True)
     demo = commands.add_parser('demo', help='Try a deterministic simulator without Codex or tokens')
-    demo.add_argument('--out', type=Path, default=Path('rulebisect-demo'))
+    demo.add_argument('--out', type=Path, help='Default: a new demo directory in the current directory')
+    demo.add_argument('--scenario', choices=['reduce', 'regression', 'fix'], default='reduce',
+                      help='Reduce failing rules, catch a regression, or validate a scoped fix')
+    demo.add_argument('--open', action='store_true', help='Open the local HTML report')
     init = commands.add_parser('init', help='Discover instructions and generate config + trusted check wrapper')
     init.add_argument('--repo', type=Path, default=Path.cwd())
     init.add_argument('--task', required=True)
@@ -175,8 +178,14 @@ def main(argv=None) -> int:
             write_report(out, report)
         elif args.command == 'demo':
             print('DETERMINISTIC SIMULATION — no Codex or model call', flush=True)
-            out = args.out
-            report = run_demo(out)
+            out = args.out or Path.cwd() / f"rulebisect-demo-{args.scenario}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
+            report = (run_demo(out) if args.scenario == 'reduce' else
+                      run_comparison_demo(out, fixed=args.scenario == 'fix'))
+            expected = {'reduce': 'observed_1_minimal', 'regression': 'regressions_observed',
+                        'fix': 'no_regressions_observed'}[args.scenario]
+            if report['status'] != expected:
+                raise ValueError(f"Demo did not produce its expected result ({expected}); inspect {out}")
+            print('Demo completed as expected. Simulation executions are not model calls.')
         else:
             experiment = experiment_from(args)
             out = experiment.out
@@ -208,7 +217,7 @@ def main(argv=None) -> int:
         print(f"\n{report['status']}: {report['message']}\nReport: {out.resolve() / 'report.html'}")
         if getattr(args, 'open', False):
             webbrowser.open((out.resolve() / 'report.html').as_uri())
-        return 0 if report['status'] in ('observed_1_minimal', 'no_regressions_observed') or args.command == 'report' else 2
+        return 0 if report['status'] in ('observed_1_minimal', 'no_regressions_observed') or args.command in ('report', 'demo') else 2
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f'rulebisect: {error}', file=sys.stderr)
         return 2

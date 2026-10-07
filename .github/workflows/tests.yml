@@ -14,3 +14,10 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s tests -v
       - run: python -m rulebisect demo --out demo-evidence
+      - run: python -m rulebisect demo --scenario regression --out regression-evidence
+      - run: python -m rulebisect demo --scenario fix --out fix-evidence
+      - run: python -m pip wheel --no-deps . --wheel-dir dist
+      - run: python -m pip install --no-deps --force-reinstall --no-index --find-links dist rulebisect
+      - name: Smoke test the installed wheel outside the source checkout
+        working-directory: ${{ runner.temp }}
+        run: rulebisect demo --scenario fix --out installed-wheel-evidence

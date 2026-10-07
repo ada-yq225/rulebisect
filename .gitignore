@@ -5,3 +5,4 @@ __pycache__/
 build/
 dist/
 rulebisect-demo/
+rulebisect-demo-*/

@@ -8,14 +8,31 @@ Provide a task and an independent check. RuleBisect runs local Codex in fresh re
 
 MIT licensed, permanently free, local-first, no telemetry or hosted service. Codex only. Alpha software. **Actual runs use your installed Codex CLI, authentication and account quota or billing.** No model calls are made by setup, planning or verifier checks.
 
-## Start in three steps
+## See what it does — no Codex account needed
+
+Install using Python 3.11+ and Git, then try:
+
+```sh
+rulebisect demo --scenario regression --open
+rulebisect demo --scenario fix --open
+```
+
+The first catches a proposed rule that fixes modern labels but breaks legacy labels. The second checks a scoped fix that preserves both contracts. Each uses eight **deterministic simulation executions, zero model calls**. Reports open locally; repeated demos get separate output directories. A successful regression demo exits 0 because catching the constructed regression is expected; real `compare` still exits 2 when it finds a regression.
+
+**Choose your workflow:** a failing task → `run`; a proposed instruction change → `draft` + `compare`; just exploring → `demo`. You need a task with an executable pass/fail check; this does not grade arbitrary prompts automatically.
+
+## Install and run your own experiment
 
 Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. Install from this source checkout (not published on PyPI yet):
 
 ```sh
 git clone https://github.com/ada-yq225/rulebisect.git
 cd rulebisect
-python3 -m pip install .
+python3 -m venv .venv
+# macOS / Linux:
+. .venv/bin/activate
+# Windows PowerShell instead: .venv\Scripts\Activate.ps1
+python -m pip install .
 ```
 
 Inside the Git repository you want to investigate:
@@ -39,7 +56,7 @@ rulebisect run
 ## Try without Codex
 
 ```sh
-rulebisect demo --out ../rulebisect-demo
+rulebisect demo --scenario reduce --out ../rulebisect-demo --open
 ```
 
 Open `../rulebisect-demo/report.html`. This is an explicitly labeled **deterministic simulator** that reduces five paragraph units to two interacting format rules. It tests the experiment pipeline, not real model behavior.
@@ -61,7 +78,7 @@ Open `../rulebisect-demo/report.html`. This is an explicitly labeled **determini
 | `history` | Find previous runs without remembering paths | No |
 | `report EVIDENCE` | Regenerate HTML, Markdown and a compact issue draft | No |
 
-`doctor`, `inspect`, and `plan` support `--json`. Run/resume/report support `--open` to open HTML locally.
+`doctor`, `inspect`, and `plan` support `--json`. Demo/run/resume/report/compare support `--open` to open HTML locally.
 
 ```sh
 rulebisect run --repeats 2 --max-runs 30 --max-tokens 100000 --timeout 180
@@ -200,3 +217,5 @@ See [VALIDATION.md](VALIDATION.md) for actual executed checks. CI is configured 
 Prior work: [Delta Debugging for LLM-integrated Systems](https://www.amazon.science/publications/delta-debugging-for-llm-integrated-systems), [skill-eval-harness](https://github.com/adewale/skill-eval-harness), [Probe-and-Refine](https://arxiv.org/abs/2606.20512). RuleBisect explores the repository-failure-to-small-instructions workflow; it does not claim a new algorithm or the first prompt debugger.
 
 Contributions welcome: redacted reproducible failures, stronger independent verifiers, context-loading evidence and parser improvements. Attach versions, assertions and repeated observations, not one-run causal claims.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for a no-model development workflow and how to submit a useful reproducer.

@@ -1,3 +1,12 @@
+# Validation — v0.4.1
+
+Executed on macOS, 2026-10-07.
+
+- All 60 automated checks passed on Python 3.11.15. New onboarding checks cover regression/fix matrices, browser-opening URLs, preserved existing evidence, distinct default outputs and unexpected-demo failure handling.
+- Built the wheel, installed it in a clean virtual environment, and ran the installed CLI outside the source checkout. Regression and fix demos each completed eight deterministic simulator executions with the expected verdicts.
+- No real Codex/model calls were made for this release. The demos validate the pipeline and teach the workflow; they do not measure model performance.
+- CI adds all demo scenarios and an installed-wheel smoke test to the existing six OS/Python combinations. Current revision results are available in GitHub Actions.
+
 # Validation — v0.4.0
 
 Executed on macOS, 2026-10-07. Experimental tool; constructed cases, not a real-world defect claim.

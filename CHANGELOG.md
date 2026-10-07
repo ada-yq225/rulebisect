@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+- Added zero-model regression and scoped-fix demos, alongside instruction reduction.
+- Added demo browser opening and unique default outputs so repeated trials do not collide.
+- Added isolated-install instructions, contribution guidance and structured feedback templates.
+- CI now checks all three scenarios and installs/runs the packaged wheel outside the checkout.
+
 ## 0.4.0
 
 - Added instruction drafts and repeated before/after validation across independent task verifiers, with per-task regression/improvement results.
