@@ -195,3 +195,19 @@ class ComparisonTests(unittest.TestCase):
         self.assertTrue((target / 'AGENTS.md').stat().st_mode & 0o200)
         self.assertFalse(source.stat().st_mode & 0o200)
         (target / 'AGENTS.md').write_text('editable copy')
+
+    @unittest.skipIf(sys.platform == 'win32', 'POSIX permission bits')
+    def test_readonly_instructions_can_be_varied_in_workspace(self):
+        from rulebisect.experiment import Experiment
+        source = self.repo / 'AGENTS.md'
+        original = source.read_bytes()
+        source.chmod(0o400)
+        exp = Experiment(self.repo, self.config, self.root / 'check', None, 2, 4, 10, runner=[sys.executable, 'simulator.py'])
+        exp.prepare()
+        for name, ids, expected in [('full', [r.id for r in exp.rules], original), ('empty', [], b'')]:
+            workspace = self.root / name
+            workspace.mkdir()
+            exp.workspace(workspace, ids)
+            self.assertEqual((workspace / 'AGENTS.md').read_bytes(), expected)
+            self.assertFalse((workspace / 'AGENTS.md').stat().st_mode & 0o200)
+        self.assertEqual(source.read_bytes(), original)

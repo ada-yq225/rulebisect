@@ -199,12 +199,12 @@ class Experiment:
     def workspace(self, path: Path, ids: list[int]):
         selected = set(ids)
         for name, (data, mode) in self.blobs.items():
+            if name in self.instruction_paths:
+                data = "".join(r.text for r in self.rules if r.path == name and r.id in selected).encode("utf-8")
             target = path / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
             target.chmod(mode)
-        for name in self.instruction_paths:
-            (path / name).write_bytes("".join(r.text for r in self.rules if r.path == name and r.id in selected).encode("utf-8"))
         subprocess.run(["git", "init", "-q"], cwd=path, check=True, timeout=10,
                        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
 

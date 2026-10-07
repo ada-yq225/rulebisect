@@ -3,7 +3,7 @@
 Executed on macOS, 2026-10-07. Experimental tool; constructed cases, not a real-world defect claim.
 
 - 54 regression checks passed on Python 3.11.15, including before/after task matrices, regressions despite improvements elsewhere, remaining failures, noise, setup errors, shared token stopping, interruptions, frozen source guards, no-model planning, draft preservation and latest-history selection.
-- An additional passing check confirms verifier-created files are excluded from agent diffs (55 checks); a further passing POSIX check confirms read-only source instructions produce editable drafts without changing source permissions (56 total checks).
+- An additional passing check confirms verifier-created files are excluded from agent diffs (55 checks); a further passing POSIX check confirms read-only source instructions produce editable drafts without changing source permissions (56 checks); read-only instructions also pass full/empty workspace generation without altering source bytes or modes (57 total checks).
 - Wheel built and installed in a clean Python 3.11 virtual environment. Installed compare --plan reported eight planned calls with zero model calls; installed draft preserved the original files.
 - In-app browser verified narrow-screen case cards, desktop comparison tables and expandable inline diffs.
 - Eight actual local authenticated Codex executions, CLI 0.159.2; requested gpt-6.1-sol. Two independently verified API contracts, two instruction variants, two repetitions per arm. The blanket instruction proposal intentionally changes whitespace semantics.
