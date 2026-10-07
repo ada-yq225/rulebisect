@@ -149,3 +149,31 @@ def doctor(repo: Path) -> dict:
         except (OSError, subprocess.SubprocessError) as error:
             add('Codex check', False, str(error))
     return {'ok': all(c['ok'] for c in checks), 'checks': checks, 'model_calls': 0}
+
+
+def draft_instructions(repo: Path, out: Path) -> Path:
+    """Create an editable instruction copy without changing the experiment baseline."""
+    repo, out = repo.resolve(), out.resolve()
+    if out.is_relative_to(repo) or (out.exists() and any(out.iterdir())):
+        raise ValueError('Draft output must be an empty directory outside the repository')
+    path = repo / CONFIG_NAME
+    if path.is_file():
+        config = json.loads(path.read_text(encoding='utf-8'))
+        selected = config.get('instructions') if isinstance(config, dict) else None
+    else:
+        selected = discover_instructions(repo)
+    if not isinstance(selected, list) or not selected or any(not isinstance(name, str) or not name for name in selected):
+        raise ValueError('Select instruction files with init first')
+    files = {}
+    for name in selected:
+        relative = Path(name)
+        target = repo / relative
+        if relative.is_absolute() or '..' in relative.parts or '.git' in relative.parts or any((repo / Path(*relative.parts[:i])).is_symlink() for i in range(1, len(relative.parts) + 1)) or not target.is_file():
+            raise ValueError(f'Instruction file missing, unsafe or symlinked: {name}')
+        files[name] = (target.read_bytes(), target.stat().st_mode & 0o777)
+    for name, (content, mode) in files.items():
+        target = out / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        target.chmod(mode)
+    return out

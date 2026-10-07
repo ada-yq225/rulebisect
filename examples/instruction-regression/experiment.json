@@ -1,0 +1,28 @@
+{
+  "task": "Implement normalize_label in labels.py following repository conventions. Modify only labels.py.",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "oracle": "verify_modern.py",
+  "verify": [
+    "{python}",
+    "{oracle}"
+  ],
+  "protected_files": [
+    "verify_modern.py",
+    "verify_legacy.py"
+  ],
+  "repeats": 2,
+  "max_runs": 8,
+  "timeout": 90,
+  "cases": [
+    {
+      "id": "modern"
+    },
+    {
+      "id": "compatibility",
+      "task": "Implement normalize_label in compatibility.py following repository conventions. Modify only compatibility.py.",
+      "oracle": "verify_legacy.py"
+    }
+  ]
+}

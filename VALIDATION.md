@@ -1,3 +1,19 @@
+# Validation — v0.4.0
+
+Executed on macOS, 2026-10-07. Experimental tool; constructed cases, not a real-world defect claim.
+
+- 54 regression checks passed on Python 3.11.15, including before/after task matrices, regressions despite improvements elsewhere, remaining failures, noise, setup errors, shared token stopping, interruptions, frozen source guards, no-model planning, draft preservation and latest-history selection.
+- An additional passing check confirms verifier-created files are excluded from agent diffs (55 total checks).
+- Wheel built and installed in a clean Python 3.11 virtual environment. Installed compare --plan reported eight planned calls with zero model calls; installed draft preserved the original files.
+- In-app browser verified narrow-screen case cards, desktop comparison tables and expandable inline diffs.
+- Eight actual local authenticated Codex executions, CLI 0.159.2; requested gpt-6.1-sol. Two independently verified API contracts, two instruction variants, two repetitions per arm. The blanket instruction proposal intentionally changes whitespace semantics.
+- Modern task: original instructions failed 2/2; proposed instructions passed 2/2 (observed improvement).
+- Compatibility task: original instructions passed 2/2; proposed instructions failed 2/2 (observed regression).
+- Overall status: regressions_observed, CLI exit 2. The improvement did not hide the other task's regression. Every original snapshot file was hash-checked and remained unchanged.
+- Reported tokens: input 520043, output 2919, cached input 464896. Cached input is part of input. No monetary cost inferred; provider routing is not independently verified.
+- Reproducible fixture: examples/instruction-regression. No raw account/session logs are published in this source repo.
+- No claims of statistical confidence, causal attribution, generalization to other tasks or superiority over other tools. Comparison does not validate instruction-loading provenance or long-session compaction behavior.
+
 # Validation — v0.3.0
 
 Executed on macOS, 2026-10-07. Constructed fixtures; no real-world defect claim.

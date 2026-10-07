@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Added instruction drafts and repeated before/after validation across independent task verifiers, with per-task regression/improvement results.
+- Added no-model comparison planning, exact planned call counts, a shared reported-token cap, alternating arm order and frozen snapshots.
+- Protect all suite verifiers in every arm and reject noisy/infrastructure-failed comparisons instead of declaring success.
+- Added comparison reports, proposed diffs, per-arm token usage, history, latest report and latest reduction resume.
+- Capture agent code diffs before the verifier runs so verifier outputs are not attributed to the agent.
+- Added a reproducible fixture showing how a change can help one contract and break another.
+
 ## 0.3.0
 
 - Added optional per-workspace dependency setup, init --setup, setup logs, and no-model environment checking.

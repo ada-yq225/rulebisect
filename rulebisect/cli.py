@@ -9,11 +9,13 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
+from .comparison import Comparison
+from .history import history, latest_report
 from .core import split_rules
 from .demo import run_demo
 from .experiment import Experiment
 from .report import write_report
-from .setup import CONFIG_NAME, discover_instructions, doctor, git_root, init_config
+from .setup import CONFIG_NAME, discover_instructions, doctor, draft_instructions, git_root, init_config
 
 
 def default_output(repo: Path, purpose='run') -> Path:
@@ -49,9 +51,11 @@ def experiment_from(args):
     timeout = args.timeout if args.timeout is not None else config.get('timeout', 300)
     max_tokens = args.max_tokens if args.max_tokens is not None else config.get('max_tokens')
     out = args.out or default_output(repo, args.command)
-    resume_from = getattr(args, 'from_report', None)
+    resume_from = latest_report(repo, resumable=True) if args.command == 'resume' and getattr(args, 'latest', False) else getattr(args, 'from_report', None)
     if resume_from is not None and resume_from.is_file():
         resume_from = resume_from.parent
+    if args.command == 'compare':
+        return Comparison(repo, config, out, model, repeats, max_runs, timeout, args.candidate, max_tokens=max_tokens)
     return Experiment(repo, config, out, model, repeats, max_runs, timeout,
                       resume_from=resume_from, max_tokens=max_tokens)
 
@@ -89,13 +93,45 @@ def main(argv=None) -> int:
     run.add_argument('--open', action='store_true', help='Open the completed HTML report')
     resume = commands.add_parser('resume', help='Reuse stable search evidence after matching snapshot/settings')
     add_experiment_options(resume)
-    resume.add_argument('--from', dest='from_report', type=Path, required=True)
+    source = resume.add_mutually_exclusive_group(required=True)
+    source.add_argument('--from', dest='from_report', type=Path)
+    source.add_argument('--latest', action='store_true', help='Latest model experiment in the default history directory')
     resume.add_argument('--open', action='store_true')
     render = commands.add_parser('report', help='Regenerate readable HTML/Markdown from saved evidence')
-    render.add_argument('path', type=Path)
+    render.add_argument('path', type=Path, nargs='?')
+    render.add_argument('--latest', action='store_true')
+    render.add_argument('--repo', type=Path, default=Path.cwd())
     render.add_argument('--open', action='store_true')
+    compare = commands.add_parser('compare', help='Validate proposed instructions against one or more tasks before applying')
+    add_experiment_options(compare)
+    compare.add_argument('--proposed', '--candidate', dest='candidate', type=Path, required=True, help='Directory containing replacements at the selected instruction paths')
+    compare.add_argument('--plan', action='store_true', help='Validate and show exact planned calls without Codex or artifacts')
+    compare.add_argument('--open', action='store_true')
+    draft = commands.add_parser('draft', help='Copy selected instructions outside the repo for editing and comparison')
+    draft.add_argument('--repo', type=Path, default=Path.cwd())
+    draft.add_argument('--out', type=Path, required=True)
+    hist = commands.add_parser('history', help='List evidence in the default output directory; no model calls')
+    hist.add_argument('--repo', type=Path, default=Path.cwd())
+    hist.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'draft':
+            repo = git_root(args.repo)
+            result = draft_instructions(repo, args.out)
+            print(f'Edit instructions in: {result}\nThen: rulebisect compare --repo "{repo}" --proposed "{result}" --plan\nOriginal instructions preserved; no model calls.')
+            return 0
+        if args.command == 'history':
+            result = history(git_root(args.repo))
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                for record in result['runs']:
+                    print(f"{record['created_at']}  {record['kind']}  {record['status']}  {record['runs']} calls\n  {record['path']}")
+                for warning in result['warnings']:
+                    print(f'Skipped unreadable evidence: {warning}', file=sys.stderr)
+                if not result['runs']:
+                    print('No saved runs in the default output directory.')
+            return 0
         if args.command == 'init':
             repo = git_root(args.repo)
             path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup)
@@ -131,7 +167,10 @@ def main(argv=None) -> int:
                 print(f'{len(units)} units. No model calls.')
             return 0
         if args.command == 'report':
-            out = args.path.parent if args.path.is_file() else args.path
+            if bool(args.path) == bool(args.latest):
+                raise ValueError('Choose report PATH or report --latest --repo PATH')
+            path = latest_report(git_root(args.repo)) if args.latest else args.path
+            out = path.parent if path.is_file() else path
             report = json.loads((out / 'report.json').read_text(encoding='utf-8'))
             write_report(out, report)
         elif args.command == 'demo':
@@ -141,6 +180,9 @@ def main(argv=None) -> int:
         else:
             experiment = experiment_from(args)
             out = experiment.out
+            if args.command == 'compare' and args.plan:
+                print(json.dumps(experiment.prepare(), ensure_ascii=False, indent=2))
+                return 0
             if args.command == 'plan':
                 experiment.prepare(materialize=False, check_codex=False)
                 n = len(experiment.rules)
@@ -166,7 +208,7 @@ def main(argv=None) -> int:
         print(f"\n{report['status']}: {report['message']}\nReport: {out.resolve() / 'report.html'}")
         if getattr(args, 'open', False):
             webbrowser.open((out.resolve() / 'report.html').as_uri())
-        return 0 if report['status'] == 'observed_1_minimal' or args.command == 'report' else 2
+        return 0 if report['status'] in ('observed_1_minimal', 'no_regressions_observed') or args.command == 'report' else 2
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(f'rulebisect: {error}', file=sys.stderr)
         return 2

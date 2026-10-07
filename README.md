@@ -55,6 +55,10 @@ Open `../rulebisect-demo/report.html`. This is an explicitly labeled **determini
 | `check` | Run the verifier on the initial snapshot | No |
 | `run` | Run baseline, reduction and fresh confirmation | Yes |
 | `resume --from EVIDENCE` | Reuse matching stable search evidence in a new output directory | Yes |
+| `draft --out DIRECTORY` | Make an editable instruction copy; preserve the original baseline | No |
+| `compare --proposed DIRECTORY` | Repeat before/after checks across one task or a regression suite | Yes |
+| `compare --proposed DIRECTORY --plan` | Validate the suite and show exact planned calls | No |
+| `history` | Find previous runs without remembering paths | No |
 | `report EVIDENCE` | Regenerate HTML, Markdown and a compact issue draft | No |
 
 `doctor`, `inspect`, and `plan` support `--json`. Run/resume/report support `--open` to open HTML locally.
@@ -72,6 +76,44 @@ rulebisect run --unit-mode file
 - `--unit-mode paragraph` is the default; `section` preserves heading sections, `file` starts with whole instruction files. Fenced code stays together. Removing paragraphs/headings can change document structure.
 
 Options can be saved as `repeats`, `max_runs`, `max_tokens`, `timeout`, `unit_mode`, `model` in `.rulebisect.json`; CLI options override them.
+
+## Check a proposed fix before applying it
+
+Finding a failing instruction subset is only the first step. Validate your proposed change on the original task and on tasks that already work:
+
+```sh
+rulebisect draft --out ../proposed-rules
+# Edit ../proposed-rules/AGENTS.md, preserving the original repo instructions.
+rulebisect compare --proposed ../proposed-rules --plan
+rulebisect compare --proposed ../proposed-rules --open
+```
+
+No suite configuration is required for a single task: comparison reuses the task and verifier saved by `init`. For several tasks, add a `cases` array to the same config:
+
+```json
+"cases": [
+  {"id": "original-failure"},
+  {"id": "working-feature", "task": "Implement the existing feature contract.", "oracle": "verify_feature.py"}
+]
+```
+
+Each case inherits the top-level settings and can override task, oracle, verify and protected_files. Ids use letters, digits, underscores or dashes. All case verifiers and protected files are protected in every workspace, including untracked verifiers. `cases` applies to `compare`; `run` still reduces the top-level task.
+
+The plan shows **cases × 2 variants × repeats** calls (one case with 2 repeats = 4 calls). If the execution cap cannot cover them, it refuses before starting. A shared reported-token cap can stop an incomplete comparison. Variant order alternates per repetition; each call starts from the same frozen code snapshot. Only selected instruction contents are replaced; other files in the proposed directory are not applied. Files must retain their selected paths; empty proposed instruction files are supported.
+
+The report lists improvements, regressions, still-passing and still-failing tasks individually, plus each arm's reported tokens and raw evidence. A regression is stable baseline passes followed by stable proposed-instruction failures. Mixed observations, infrastructure errors or interruptions are inconclusive. Exit 0 requires every proposed task to pass every repetition with stable baselines; 2 means regression, remaining failure or uncertainty. This is a finite check, not statistical confidence or a guarantee on unseen tasks. No instructions are applied automatically.
+
+**Reduction's `candidate/` directory is a smaller failing reproducer, not a suggested fix.** Start with `draft`, edit the copies yourself, then compare. Do not edit the original instructions before comparison, or you change the baseline. Example: [instruction-regression](examples/instruction-regression).
+
+## Find evidence quickly
+
+```sh
+rulebisect history
+rulebisect report --latest --open
+rulebisect resume --latest --max-runs 100
+```
+
+History reads summaries in the default `.rulebisect-runs/<repo-name>` directory, newest first, with no model calls. Broken reports are skipped with a warning. Latest resume selects a completed/interrupted Codex reduction, excluding checks, comparisons, simulations and running experiments; snapshot/version checks still apply. Custom `--out` directories need an explicit path. Comparisons can be rerun but are not resumable in this release.
 
 ## Prepare dependencies automatically
 
@@ -144,6 +186,8 @@ Statuses: `observed_1_minimal`, `not_reproduced`, `control_failed`, `inconclusiv
 The source repository is never modified by experiments. `init` intentionally adds configuration and, when using --check, a verifier wrapper. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
 
 Copies are not containers or a security boundary. Codex runs with `workspace-write`, `approval_policy="never"`, `--ephemeral`, `--ignore-user-config`; verifier commands run with your local account. Use trusted repositories/checks only. Global instructions, project configuration, imports, network services and tool versions can affect behavior. POSIX timeouts terminate the process group; Windows currently terminates the direct process only. Full reports, diffs and logs may contain private code/output.
+
+Product rationale and public sources: [demand notes](docs/DEMAND.md).
 
 ## Development and evidence
 

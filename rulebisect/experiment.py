@@ -25,6 +25,7 @@ class Experiment:
         self.resume_from = resume_from
         self.max_tokens = max_tokens
         self.cache = {}
+        self.progress = None
         self.rules = []
         self.blobs = {}
         self.report = {"schema_version": 1, "version": __version__, "status": "pending", "message": "",
@@ -46,7 +47,7 @@ class Experiment:
             raise ValueError(f"Symlinks and paths outside the repository are unsupported: {value}")
         return path.as_posix()
 
-    def prepare(self, materialize: bool = True, check_codex: bool = True):
+    def prepare(self, materialize: bool = True, check_codex: bool = True, instruction_overrides: dict[str, bytes] | None = None, allow_empty: bool = False):
         self.repo, self.out = self.repo.resolve(), self.out.resolve()
         if self.out.is_relative_to(self.repo):
             raise ValueError("Output directory must be outside the target repository")
@@ -103,9 +104,14 @@ class Experiment:
                     raise ValueError(f"Required file is missing: {name}")
                 continue  # tracked working-tree deletions are part of the snapshot
             self.blobs[name] = (path.read_bytes(), path.stat().st_mode & 0o777)
+        self.report["source_snapshot_sha256"] = digest(json.dumps({"files": {name: digest(data) for name, (data, _) in self.blobs.items()}, "modes": {name: mode for name, (_, mode) in self.blobs.items()}}, sort_keys=True).encode())
+        for name, data in (instruction_overrides or {}).items():
+            if name not in instruction_paths or not isinstance(data, bytes):
+                raise ValueError("Overrides must be bytes for selected instruction files only")
+            self.blobs[name] = (data, self.blobs[name][1])
         for name in instruction_paths:
             self.rules.extend(split_rules(name, self.blobs[name][0].decode("utf-8"), len(self.rules), self.report["unit_mode"]))
-        if not self.rules:
+        if not self.rules and not allow_empty:
             raise ValueError("No non-empty instruction units found")
         self.instruction_paths = instruction_paths
         self.oracle_name = oracle
@@ -128,6 +134,11 @@ class Experiment:
                                                            text=True, timeout=10, check=True).stdout.strip()
         if not materialize:
             return
+        self.materialize()
+
+    def materialize(self):
+        """Write evidence for an already validated, frozen snapshot."""
+        oracle = self.oracle_name
         self.out.mkdir(parents=True, exist_ok=True)
         (self.out / "trials").mkdir()
         (self.out / "oracle").mkdir()
@@ -282,6 +293,9 @@ class Experiment:
                 record["reason"] = record["setup"].get("reason", "Environment setup failed or timed out")
             if self.runner is None and not record["agent"].get("skipped"):
                 record["codex"] = codex_metadata(artifact / "agent.log")
+            # Preserve agent output before the verifier can create its own artifacts.
+            record["file_changes"] = self.collect_changes(workspace, artifact, initial_untracked)
+            record["changed_files"] = [v['path'] for v in record["file_changes"]]
             if record["agent"].get("exit_code") == 0:
                 changed = []
                 for name in self.protected:
@@ -305,12 +319,13 @@ class Experiment:
                         record["reason"] = "Verifier error: use exit 0=pass, 1=behavioral failure, 2+=setup error"
             elif not record["agent"].get("skipped"):
                 record["reason"] = "Agent execution failed or timed out; not classified as task failure"
-            record["file_changes"] = self.collect_changes(workspace, artifact, initial_untracked)
-            record["changed_files"] = [v['path'] for v in record["file_changes"]]
         record["state"] = "completed"
         (artifact / "trial.json").write_text(json.dumps(record, indent=2) + "\n")
         write_report(self.out, self.report)
-        print(f"  run {number}/{self.max_runs}: {phase}, {len(ids)} units -> {record['outcome']}", flush=True)
+        if self.progress is not None:
+            self.progress(record)
+        else:
+            print(f"  run {number}/{self.max_runs}: {phase}, {len(ids)} units -> {record['outcome']}", flush=True)
         return record
 
     def evaluate(self, ids: list[int], phase: str = "search", fresh: bool = False) -> str:
