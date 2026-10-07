@@ -26,7 +26,7 @@ class ComparisonTests(unittest.TestCase):
                           runner=options.pop('runner', [sys.executable, 'simulator.py']), **options)
 
     def test_improvement_and_regression_are_not_hidden_by_average(self):
-        (self.repo / 'legacy.py').write_text('import json\nfrom pathlib import Path\nraise SystemExit(0 if json.loads(Path("result.json").read_text())["format"] == "legacy" else 1)')
+        (self.repo / 'legacy.py').write_text('import json\nfrom pathlib import Path\nraise SystemExit(0 if json.loads(Path("result.json").read_text(encoding='utf-8'))["format"] == "legacy" else 1)')
         self.config['cases'] = [{'id': 'modern'}, {'id': 'legacy', 'oracle': 'legacy.py'}]
         original = (self.repo / 'AGENTS.md').read_bytes()
         exp = self.comparison()
@@ -37,11 +37,11 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual([t['arm'] for t in report['trials'][:4]], ['baseline', 'candidate', 'candidate', 'baseline'])
         self.assertEqual((self.repo / 'AGENTS.md').read_bytes(), original)
         self.assertFalse((self.repo / 'result.json').exists())
-        page = (exp.out / 'report.html').read_text()
+        page = (exp.out / 'report.html').read_text(encoding='utf-8')
         self.assertIn('回退 / Regression', page)
         self.assertIn('cases/modern/candidate/trials/0001/verify.log', page)
         self.assertIn('after/result.json', page)
-        self.assertIn('modern', (exp.out / 'report.md').read_text())
+        self.assertIn('modern', (exp.out / 'report.md').read_text(encoding='utf-8'))
         self.assertTrue(all('legacy.py' in child.protected for child in exp.experiments.values()))
 
     def test_candidate_passes_without_claiming_causality(self):
@@ -53,7 +53,7 @@ class ComparisonTests(unittest.TestCase):
         self.assertIn('Not a guarantee', report['message'])
 
     def test_both_failed_is_not_a_validated_fix(self):
-        report = self.comparison(text=(self.repo / 'AGENTS.md').read_text()).execute()
+        report = self.comparison(text=(self.repo / 'AGENTS.md').read_text(encoding='utf-8')).execute()
         self.assertEqual(report['status'], 'candidate_failed')
         self.assertEqual(report['cases'][0]['verdict'], 'unchanged_fail')
 

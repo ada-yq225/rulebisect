@@ -154,7 +154,7 @@ class Experiment:
         previous_root = self.resume_from.resolve()
         if previous_root == self.out or self.out.is_relative_to(previous_root):
             raise ValueError("Resume output must be a new directory outside the previous evidence")
-        previous = json.loads((previous_root / "report.json").read_text())
+        previous = json.loads((previous_root / "report.json").read_text(encoding="utf-8"))
         for key in ("version", "runner", "requested_model", "codex_version", "snapshot_sha256", "task", "rules", "verify", "oracle", "protected_files", "repeats", "timeout_seconds", "unit_mode", "agent_command", "setup"):
             if previous.get(key) != self.report.get(key):
                 raise ValueError(f"Cannot reuse evidence: {key} changed")
