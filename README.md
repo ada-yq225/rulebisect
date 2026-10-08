@@ -4,7 +4,7 @@
 
 **Debug Codex rules. Keep the fix from breaking another task.**
 
-Provide a task and an independent check. RuleBisect runs local Codex in fresh repository copies, shrinks failing instruction sets, and leaves an inspectable evidence bundle. It reports uncertainty instead of inventing a conflict.
+Provide a task and the result you expect: a file, text, JSON value, or test command. RuleBisect runs local Codex in fresh repository copies, shrinks failing instruction sets, and checks your proposed fix against other tasks. It leaves inspectable evidence and reports uncertainty instead of inventing a conflict.
 
 MIT licensed, permanently free, local-first, no telemetry or hosted service. Codex only. Alpha software. **Actual runs use your installed Codex CLI, authentication and account quota or billing.** No model calls are made by setup, planning or verifier checks.
 
@@ -23,12 +23,12 @@ The first catches a proposed rule that fixes modern labels but breaks legacy lab
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.5.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.5.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.6.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.6.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.5.0/rulebisect-0.5.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.6.0/rulebisect-0.6.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -52,7 +52,29 @@ rulebisect check --all --open
 rulebisect run --model YOUR_CODEX_MODEL_ID --open
 ```
 
-The wizard asks four questions: concrete task, independent check, optional environment setup, optional model. It suggests commands based on project manifests; you must choose explicitly. It does not install dependencies or run checks/model calls. Configuration creation is the only write. Review `instructions` and `protected_files` before a real run.
+The wizard collects your task, independent check, optional environment setup and model. At the check prompt, choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` for several checks, or your test command. Command suggestions require an explicit choice. It does not install dependencies or run checks/model calls. Review `instructions` and `protected_files` before a real run.
+
+### Check output without writing a verifier
+
+Save this as `checks.json` inside your repository:
+
+```json
+[
+  {"type": "file_exists", "path": "result.json"},
+  {"type": "json_equals", "path": "result.json", "pointer": "/format", "value": "modern"},
+  {"type": "file_absent", "path": "debug.log"}
+]
+```
+
+```sh
+rulebisect init --task 'Create result.json with format="modern"; do not create debug.log.' --assertions checks.json
+rulebisect doctor --offline
+rulebisect check --all
+# Only this step uses your Codex account:
+rulebisect run --model YOUR_CODEX_MODEL_ID --open
+```
+
+Missing output on initial code is an expected behavior failure. Checks are frozen into a self-contained, protected verifier; changing the input JSON later does not change saved criteria. The same verifier works with `run` and `compare`. Six check types cover files, text, regex and JSON; see [assertion examples and limits](docs/ASSERTIONS.md) or the [output-contract fixture](examples/output-contract). Use your test command or a custom verifier for behavior that file checks cannot establish.
 
 You can also configure directly:
 
@@ -109,6 +131,7 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 | `compare --proposed DIRECTORY --plan` | Validate the suite and show exact planned calls | No |
 | `history` | Find previous runs without remembering paths | No |
 | `report EVIDENCE` | Regenerate HTML, Markdown and a compact issue draft | No |
+| `share EVIDENCE --out summary.html` | Export an offline summary containing aggregate counts only | No |
 
 `doctor`, `inspect`, and `plan` support `--json`. Demo/run/resume/report/compare support `--open` to open HTML locally.
 
@@ -136,7 +159,7 @@ rulebisect case list
 rulebisect check --all --open
 ```
 
-Your original task remains in the suite. `case add` accepts either a trusted check command or `--oracle existing-verifier.py`; no command or model is executed. Configuration changes are atomic. `case remove ID` removes the entry and keeps verifier files. IDs are portable, unique names; the last case cannot be removed. Case commands accept `--repo` and `--config`.
+Your original task remains in the suite. `case add` accepts a trusted check command, `--oracle existing-verifier.py`, or `--assertions checks.json`; no command or model is executed. JSON checks are frozen when the case is saved. Configuration changes are atomic. `case remove ID` removes the entry and keeps verifier files. IDs are portable, unique names; the last case cannot be removed. Case commands accept `--repo` and `--config`.
 
 `check --all` runs setup and each verifier on its own frozen initial snapshot, then produces a combined report. Exit 0 means all checks returned 0 or 1; **it does not mean every behavior passed**. Initial unimplemented tasks may fail as expected. Exit 2 means infrastructure trouble or interruption. Check assertions/logs: some frameworks use exit 1 for setup/import errors too. This checks the local verifier environment, not Codex's sandbox.
 
@@ -251,15 +274,23 @@ The offline HTML report includes bilingual status/next steps, full-vs-empty cont
 
 Other exports: JSON, Markdown, candidate instruction files, a **review-only** `candidate.patch`, and an `issue.md` draft that omits task text, instruction bodies and raw logs by default. No changes are automatically applied and no issue is posted. Review all exports for private content before sharing.
 
+To share only the outcome counts:
+
+```sh
+rulebisect share ../experiment-evidence --out ../summary.html
+```
+
+This creates a standalone offline HTML file from a fixed metadata allowlist: status, source, counts and reported token totals. Tasks, instructions, code, filenames, case IDs, models, commands, logs, timestamps and repository paths are omitted. The output must be a new file outside the evidence directory; nothing is uploaded. Review even aggregate statistics before publishing. A summary is not independently authenticated evidence or a complete reproduction bundle. [Sharing details](docs/SHARING.md).
+
 Statuses: `observed_1_minimal`, `not_reproduced`, `control_failed`, `inconclusive`, `interrupted`, `check_only`. CLI exits 0 for a completed reduction, valid setup/planning operations or an executable initial verifier (even if behavior failed); 2 otherwise.
 
 ## Local execution boundaries
 
-The source repository is never modified by experiments. `init` intentionally adds configuration and, when using --check, a verifier wrapper. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
+The source repository is never modified by experiments. `init` intentionally adds configuration and, when using `--check` or `--assertions`, a verifier wrapper. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
 
 Copies are not containers or a security boundary. Codex runs with `workspace-write`, `approval_policy="never"`, `--ephemeral`, `--ignore-user-config`; verifier commands run with your local account. Use trusted repositories/checks only. Global instructions, project configuration, imports, network services and tool versions can affect behavior. POSIX timeouts terminate the process group; Windows currently terminates the direct process only. Full reports, diffs and logs may contain private code/output.
 
-Product rationale and public sources: [demand notes](docs/DEMAND.md).
+Product rationale and public sources: [demand notes](docs/DEMAND.md) and the [demand, competitors and differentiation review](docs/INNOVATION.md). Assertions and A/B evaluation have prior art; the focus here is a simpler Codex instruction-debugging workflow.
 
 ## Development and evidence
 

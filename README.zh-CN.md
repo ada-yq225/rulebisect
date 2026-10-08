@@ -21,12 +21,12 @@ rulebisect demo --scenario fix --open
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.5.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.5.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.6.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.6.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.5.0/rulebisect-0.5.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.6.0/rulebisect-0.6.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -50,7 +50,29 @@ rulebisect check --all --open
 rulebisect run --model 你可用的Codex模型ID --open
 ```
 
-向导只问四项：具体任务、独立检查命令、可选的环境准备命令、可选的模型。它根据项目清单提示可能的测试命令，需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的指令与保护文件。
+向导收集具体任务、独立检查、可选的环境准备命令和模型。检查步骤可以输入 `:exists`、`:contains` 或 `:json`，按提示选择文件、文本或 JSON 验收条件；多个条件用 `@checks.json`，已有测试则填检查命令。建议命令需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的指令与保护文件。
+
+### 不写验证脚本，也能检查结果
+
+在自己的仓库中保存 `checks.json`：
+
+```json
+[
+  {"type": "file_exists", "path": "result.json"},
+  {"type": "json_equals", "path": "result.json", "pointer": "/format", "value": "modern"},
+  {"type": "file_absent", "path": "debug.log"}
+]
+```
+
+```sh
+rulebisect init --task '创建 result.json，format 为 "modern"，不要生成 debug.log。' --assertions checks.json
+rulebisect doctor --offline
+rulebisect check --all
+# 只有这一步使用你的 Codex 账户：
+rulebisect run --model 你可用的Codex模型ID --open
+```
+
+初始代码还没有输出文件时，行为失败符合预期。验收条件会固化到独立且受保护的验证器中；之后修改输入 JSON，不会悄悄改变已保存条件。六种检查覆盖文件、文本、正则和 JSON，可用于缩减与修改对照。更多例子见[断言指南](docs/ASSERTIONS.md)和[完整输出契约案例](examples/output-contract)；复杂行为继续使用测试命令或自定义验证器。
 
 也可以继续使用直接配置：
 
@@ -100,7 +122,7 @@ rulebisect case list
 rulebisect check --all --open
 ```
 
-原任务会保留在套件中。新增用例可以用检查命令，也可以指定 `--oracle 现有验证器.py`；保存命令时不会执行。配置原子写入，重复 ID 会拒绝；`case remove ID` 只移除条目，保留验证器文件，且不能删除最后一个用例。
+原任务会保留在套件中。新增用例可以用检查命令、`--oracle 现有验证器.py` 或 `--assertions checks.json`；保存时不会执行命令或模型，JSON 条件会固化。配置原子写入，重复 ID 会拒绝；`case remove ID` 只移除条目，保留验证器文件，且不能删除最后一个用例。
 
 `check --all` 在各自独立的初始快照中执行每个 setup 和验证器，汇总成报告，不调用 Codex。退出码 0 表示全部验证器返回 0 或 1，**不等于所有行为都通过**：初始代码尚未实现时，行为失败可以符合预期。环境错误或中断返回 2。部分测试框架也会用 1 表示导入错误，请检查断言和日志。这是在检查本地验证环境，不能证明 Codex 沙箱中的命令可用。
 
@@ -130,6 +152,7 @@ rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
 | `compare --proposed 目录 --plan` | 检查回归用例并显示计划调用数 | 否 |
 | `history` | 找回历史实验，不用记报告路径 | 否 |
 | `report 报告目录` | 从 JSON 重新生成 HTML / Markdown | 否 |
+| `share 报告目录 --out summary.html` | 导出仅含汇总计数的离线分享页 | 否 |
 | `--unit-mode section` | 保留标题与段落结构，按标题节缩减 | 随所属命令 |
 | `--unit-mode file` | 先定位哪个指令文件值得检查 | 随所属命令 |
 | `--max-runs 30` | 限制总调用次数 | 随所属命令 |
@@ -157,6 +180,14 @@ rulebisect resume --from /旧证据目录 --max-runs 100
 - HTML、JSON、Markdown、精简 Issue 草稿、候选指令文件与差异补丁。
 
 补丁只是调查建议，**不会自动应用**。先审查，再在其他任务上验证。代码差异覆盖已快照的非指令文件和未被 Git 忽略的新文件；准备依赖时产生的文件不算新文件证据，较大文件和二进制文件仅记录名称。精简 Issue 草稿默认不包含任务内容、指令正文或原始日志，分享前仍需检查版本等信息。
+
+只想分享结果计数，可以运行：
+
+```sh
+rulebisect share ../experiment-evidence --out ../summary.html
+```
+
+生成独立、可离线打开的 HTML，只按固定白名单导出状态、来源、计数和已上报 Token；不包含任务、指令、代码、文件名、用例 ID、模型、命令、日志、时间戳或仓库路径。输出必须是证据目录之外的新文件，不会上传。汇总数字也请先审查；摘要不是经过独立认证的证据，也不能代替完整复现材料。[分享说明](docs/SHARING.md)。
 
 ## 修改规则后，先验证有没有回退
 
@@ -226,7 +257,7 @@ rulebisect init --task "明确的任务" --oracle verify_behavior.py --model 模
 
 快照包含已跟踪文件的当前内容（包括未提交修改），以及显式指定的指令、验证器和保护文件。其他未跟踪/忽略文件、Git 历史、安装的依赖不复制；暂不支持符号链接、子模块。仓库副本不是容器或安全边界，仅运行可信仓库和验证命令。原始日志、代码差异和完整报告可能含私有代码，分享前检查。
 
-本轮功能选择依据和公开需求来源：[需求记录](docs/DEMAND.md)。
+本轮功能选择依据和公开需求来源：[需求记录](docs/DEMAND.md)、[创新性与竞品核对](docs/INNOVATION.md)。
 
 ## 开发与贡献
 

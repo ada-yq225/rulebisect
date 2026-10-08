@@ -1,3 +1,18 @@
+# Validation — v0.6.0
+
+Executed on macOS, 2026-10-08. Constructed fixtures; no real-world defect or model-performance claim.
+
+- All **148 automated tests passed** on Python 3.11.15. New coverage includes strict assertion schemas, UTF-8/JSON behavior failures, JSON Pointer/type handling, output-size and symlink errors, standalone verifier generation, assertion-based reduction, frozen criteria and no-write cancellation.
+- Share tests check allowlisted aggregates, missing/partial usage, adversarial HTML/text, excluded private fields, racing output publication, refusal to overwrite and source/output symlink-loop errors. Summary rendering is checked as HTML content, not visually inspected.
+- Review reproduced and fixed broken configuration symlink handling, initializer partial-write/interrupt rollback, instruction/oracle symlink ancestors and deeply nested input JSON. New tests check that existing user files are preserved when initialization fails.
+- Built and installed the wheel into an isolated Python 3.11 virtual environment. From outside the checkout, both the existing guided workflow and the new no-code workflow completed: wizard JSON check, assertion case creation, input-spec mutation, whole-suite checks, summary export and malformed-spec rejection. Saved criteria stayed unchanged after editing the input JSON.
+- Followed the output-contract example in a separate Git repository. Both initial verifiers failed for missing output, without infrastructure failure or model calls. The comparison plan reported exactly 12 calls. Both generated verifiers then passed independently under `python -I` against correct outputs outside that repository, using only the standard library. Original instructions and source remained unchanged.
+- Installed demos completed with expected statuses: regression (8 simulator executions), scoped fix (8) and reduction (48). These are explicitly labeled simulations, not actual Codex runs.
+- **No actual Codex/model calls were made for v0.6.** Prior actual Codex runs are documented below; they do not establish effectiveness of the new release on user repositories.
+- Automated browser access remains blocked by the browser security policy; no alternate route was used. Visual/browser-interaction verification was not completed. Static report/privacy tests and installed export checks passed.
+- CI runs Linux/macOS/Windows × Python 3.11/3.13, all three demos, wheel installation and both installed workflows. Revision-specific results are recorded in GitHub Actions.
+- [Demand and differentiation review](docs/INNOVATION.md) compares primary sources and adjacent tools. Assertions, paired evaluation and delta debugging have prior art; workflow differentiation is a product hypothesis, not a first-in-the-world claim.
+
 # Validation — v0.5.0
 
 Executed on macOS, 2026-10-08. Constructed fixtures; no real-world defect claim.

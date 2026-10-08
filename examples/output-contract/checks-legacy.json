@@ -1,0 +1,6 @@
+[
+  {"type": "file_exists", "path": "result.json"},
+  {"type": "json_equals", "path": "result.json", "pointer": "/format", "value": "legacy"},
+  {"type": "json_equals", "path": "result.json", "pointer": "/value", "value": "  Alpha  "},
+  {"type": "file_absent", "path": "debug.log"}
+]

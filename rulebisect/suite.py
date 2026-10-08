@@ -124,7 +124,7 @@ def list_cases(config_path: Path) -> list[dict]:
 
 
 def add_case(repo: Path, config_path: Path, case_id: str, task: str,
-             check: str | None = None, oracle: str | None = None) -> dict:
+             check: str | None = None, oracle: str | None = None, assertions: list[dict] | None = None) -> dict:
     """Append a case and return its fields plus creation/configuration metadata.
 
     The result contains ``id/task/oracle/verify/generated_oracle/case_count/config``.
@@ -138,8 +138,8 @@ def add_case(repo: Path, config_path: Path, case_id: str, task: str,
     path, config, original = _load_config(config_path)
     if not isinstance(task, str) or not task.strip():
         raise ValueError('Provide a concrete --task for the case')
-    if (check is None) == (oracle is None):
-        raise ValueError('Choose exactly one of --check or --oracle')
+    if sum(value is not None for value in (check, oracle, assertions)) != 1:
+        raise ValueError('Choose exactly one of --check, --oracle or --assertions')
     updated = copy.deepcopy(config)
     cases = updated.setdefault('cases', [{'id': 'task'}])
     case = {'id': case_id, 'task': task, 'oracle': oracle,
@@ -147,7 +147,11 @@ def add_case(repo: Path, config_path: Path, case_id: str, task: str,
     cases.append(case)
     # Validate ids/schema before interpolating the id into any filesystem path.
     suite_cases(updated)
-    source = _command_source(check) if check is not None else None
+    if assertions is not None:
+        from .assertions import build_oracle
+        source = build_oracle(assertions)
+    else:
+        source = _command_source(check) if check is not None else None
     selected = config.get('instructions')
     if not isinstance(selected, list) or not selected:
         raise ValueError('Config requires an explicit instructions list')

@@ -13,6 +13,8 @@ from .comparison import Comparison, select_cases
 from .checks import SuiteCheck
 from .onboarding import run_wizard
 from .suite import add_case, list_cases, remove_case
+from .assertions import validate_assertions
+from .share import export_summary
 from .history import history, latest_report
 from .core import split_rules
 from .demo import run_demo, run_comparison_demo
@@ -24,6 +26,16 @@ from .setup import CONFIG_NAME, discover_instructions, doctor, draft_instruction
 def default_output(repo: Path, purpose='run') -> Path:
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     return repo.parent / '.rulebisect-runs' / repo.name / f'{purpose}-{stamp}'
+
+
+def load_assertions(path):
+    if path is None:
+        return None
+    try:
+        spec = json.loads(path.read_text(encoding='utf-8'))
+    except RecursionError as error:
+        raise ValueError('Assertions JSON is nested too deeply; use a flat list of output checks.') from error
+    return validate_assertions(spec)
 
 
 def add_experiment_options(parser):
@@ -42,7 +54,7 @@ def experiment_from(args):
     repo = git_root(args.repo)
     config_path = args.config or repo / CONFIG_NAME
     if not config_path.is_file():
-        raise ValueError(f'Config missing: {config_path}. Start with rulebisect init --task "..." --check "..." --model MODEL')
+        raise ValueError(f'Config missing: {config_path}. Start with rulebisect init --wizard')
     config = json.loads(config_path.read_text(encoding='utf-8'))
     if not isinstance(config, dict):
         raise ValueError('Config must be a JSON object')
@@ -77,12 +89,13 @@ def main(argv=None) -> int:
     init = commands.add_parser('init', help='Discover instructions and generate config + trusted check wrapper')
     init.add_argument('--repo', type=Path, default=Path.cwd())
     init.add_argument('--task')
-    init.add_argument('--wizard', action='store_true', help='Guided task/check setup with repository command suggestions; no model calls')
+    init.add_argument('--wizard', action='store_true', help='Guided output checks or test commands; no model calls')
     init.add_argument('--model')
     init.add_argument('--setup', help='Quoted environment command executed before every trial, e.g. "npm ci"')
     verifier = init.add_mutually_exclusive_group()
     verifier.add_argument('--check', help='Quoted command, e.g. "python -m unittest discover -s tests"; no shell expansion')
     verifier.add_argument('--oracle', help='Existing repository-relative Python verifier (exit 0/1/2+)')
+    verifier.add_argument('--assertions', type=Path, help='JSON output checks; compile an independent verifier without writing Python')
     init.add_argument('--instructions', nargs='+', help='Override automatic AGENTS.md selection; Skills are opt-in')
     doc = commands.add_parser('doctor', help='Check Python, Git, Codex and login without model calls')
     doc.add_argument('--repo', type=Path, default=Path.cwd())
@@ -138,6 +151,10 @@ def main(argv=None) -> int:
             verification = action.add_mutually_exclusive_group(required=True)
             verification.add_argument('--check', help='Trusted command; saved but not executed')
             verification.add_argument('--oracle', help='Existing repository-relative verifier')
+            verification.add_argument('--assertions', type=Path, help='JSON list of deterministic file/text/JSON checks')
+    share = commands.add_parser('share', help='Export a standalone summary that excludes tasks, code, identifiers and logs')
+    share.add_argument('path', type=Path, help='Saved evidence directory or report.json')
+    share.add_argument('--out', type=Path, required=True, help='New HTML file outside the evidence directory; no upload')
     draft = commands.add_parser('draft', help='Copy selected instructions outside the repo for editing and comparison')
     draft.add_argument('--repo', type=Path, default=Path.cwd())
     draft.add_argument('--out', type=Path, required=True)
@@ -146,6 +163,10 @@ def main(argv=None) -> int:
     hist.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'share':
+            path = export_summary(args.path, args.out)
+            print(f'Summary saved: {path}\nIncludes aggregate outcomes only; no tasks, code, names or logs. Review before sharing. No upload or model calls.')
+            return 0
         if args.command == 'case':
             repo = git_root(args.repo)
             path = args.config or repo / CONFIG_NAME
@@ -158,8 +179,11 @@ def main(argv=None) -> int:
                         print(f"{value['id']}: {value['task']}\n  verifier: {value['oracle']}")
                     print(f'{len(values)} cases. No model calls.')
             elif args.case_command == 'add':
-                result = add_case(repo, path, args.id, args.task, check=args.check, oracle=args.oracle)
-                print(f"Saved case {result['id']}. Next: rulebisect check --all --repo \"{repo}\" --config \"{path}\"\nNo model calls; check command was not executed.")
+                result = add_case(repo, path, args.id, args.task, check=args.check, oracle=args.oracle,
+                                  assertions=load_assertions(args.assertions))
+                print(f"Saved case {result['id']}. Next: rulebisect check --all --repo \"{repo}\" --config \"{path}\"\nNo model calls; verifier was saved without execution.")
+                if args.assertions:
+                    print('Assertions are frozen in the generated verifier; editing the input JSON does not change saved criteria.')
             else:
                 remove_case(path, args.id)
                 print(f'Removed case {args.id}; verifier files preserved. No model calls.')
@@ -184,17 +208,20 @@ def main(argv=None) -> int:
         if args.command == 'init':
             repo = git_root(args.repo)
             if args.wizard:
-                if any((args.task, args.check, args.oracle, args.model, args.setup, args.instructions)):
+                if any((args.task, args.check, args.oracle, args.assertions, args.model, args.setup, args.instructions)):
                     raise ValueError('Use init --wizard --repo PATH, or provide explicit init options without --wizard')
                 run_wizard(repo)
                 return 0
-            if not args.task or not (args.check or args.oracle):
-                raise ValueError('Use init --wizard, or provide --task and --check/--oracle')
-            path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup)
+            if not args.task or not (args.check or args.oracle or args.assertions):
+                raise ValueError('Use init --wizard, or provide --task and --check/--oracle/--assertions')
+            path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup,
+                               assertions=load_assertions(args.assertions))
             print(f'Created {path}\nNext: rulebisect plan\nThen: rulebisect check (test the verifier without Codex)\nFinally: rulebisect run')
             if not args.model:
                 print('Choose --model MODEL when running, or add model to the config.')
             print('Tracked test files were added to protected_files. Review this list and the selected instruction files.')
+            if args.assertions:
+                print('Assertions are frozen in the generated verifier; editing the input JSON does not change saved criteria.')
             return 0
         if args.command == 'doctor':
             result = doctor(args.repo, offline=args.offline, config_path=args.config, proposed=args.proposed)

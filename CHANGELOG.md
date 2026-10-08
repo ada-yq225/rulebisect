@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0 — Define the result, debug the rules, share the outcome
+
+- Define deterministic acceptance checks in JSON without writing Python: file existence/absence, text inclusion/exclusion, regex search and exact JSON Pointer values. Strict schema validation catches mistakes before configuration is written.
+- Compile checks into self-contained, protected verifiers. Saved criteria stay fixed across fresh workspaces, reduction and proposed-instruction comparisons; editing the input JSON does not change them.
+- Guided initialization offers file, text and JSON checks plus `@FILE` imports. Regression cases accept the same `--assertions` option as initialization.
+- Export standalone offline summaries with `share`, using a fixed allowlist of outcomes and numeric aggregates. Tasks, instructions, code, filenames, case IDs, models, commands and logs are excluded. Exports refuse overwriting and stay outside the evidence directory.
+- Reject unsafe/symlinked initialization paths; roll back generated verifiers if configuration creation fails. Deeply nested JSON and share-path symlink loops return actionable errors.
+- Added a bilingual assertion/sharing guide, a complete output-contract fixture, installed-package coverage of the new workflow and a primary-source comparison that separates workflow differentiation from algorithmic novelty.
+
 ## 0.5.0 — From one failure to a regression workflow
 
 - Guided initialization collects a task, explicit check choice, optional setup and model. Repository manifests provide suggestions; commands are never inferred and executed automatically.

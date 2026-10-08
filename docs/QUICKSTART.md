@@ -14,7 +14,9 @@ rulebisect doctor --offline
 rulebisect check --all --open
 ```
 
-The wizard asks for a concrete task and an independent check. It can suggest commands found in project files; it does **not** run those inferred commands. Initialization makes no model calls. Review the selected instructions and protected files in `.rulebisect.json`.
+The wizard asks for a concrete task and an independent check. Choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` to import several checks, or your test command. It can suggest commands found in project files; it does **not** run those inferred commands. Initialization makes no model calls. Review the selected instructions and protected files in `.rulebisect.json`.
+
+For an output-based task, [JSON assertions](ASSERTIONS.md) let you start without writing a verifier. Try the [complete output-contract fixture](../examples/output-contract/README.md). Saved checks are frozen; editing the input JSON later does not alter the verifier.
 
 You can still initialize directly and save a model:
 
@@ -38,7 +40,7 @@ rulebisect case list --json
 rulebisect check --all --open
 ```
 
-Supply either `--check "COMMAND"` or `--oracle verifier.py`. Commands use argv parsing, without shell pipes or expansion; put multiple steps in a wrapper script. The Python oracle must be inside the repository. Case commands accept `--repo PATH` and `--config PATH` for another repository or configuration.
+Supply exactly one of `--check "COMMAND"`, `--oracle verifier.py`, or `--assertions checks.json`. Commands use argv parsing, without shell pipes or expansion; put multiple steps in a wrapper script. The Python oracle must be inside the repository. Case commands accept `--repo PATH` and `--config PATH` for another repository or configuration.
 
 `rulebisect case remove modern-labels` removes the case entry and **preserves its verifier files**. Keep at least one case for an already-working behavior, alongside the original failure.
 
@@ -72,6 +74,7 @@ Inspect regressions, remaining failures and uncertainty individually. Passing th
 | I want to locate failing instruction interactions | `rulebisect plan`, then `rulebisect run --open` |
 | I want to edit a rule without losing the baseline | `draft`, selected `compare --plan`, then full `compare` |
 | I want the latest saved report | `rulebisect report --latest --open` |
+| I want an outcome summary without code or logs | `rulebisect share EVIDENCE --out summary.html` |
 
 Reduction's `candidate/` is a smaller **failing reproducer**, not a proposed fix. Use `draft` to prepare a fix for comparison.
 
@@ -87,7 +90,9 @@ rulebisect doctor --offline
 rulebisect check --all --open
 ```
 
-向导需要你提供具体任务和独立的验证命令。它可以根据项目文件建议命令，但**不会执行推测出的命令**。初始化不调用模型。检查 `.rulebisect.json` 中选择的指令文件和保护文件；已有的 `init --task "..." --check "..." --model MODEL` 用法仍然可用。
+向导需要具体任务和独立检查。检查步骤可选 `:exists`、`:contains` 或 `:json`，`@checks.json` 导入多个条件，也可以填已有测试命令。它可以根据项目文件建议命令，但**不会执行推测出的命令**。初始化不调用模型。检查 `.rulebisect.json` 中选择的指令文件和保护文件；已有的 `init --task "..." --check "..." --model MODEL` 用法仍然可用。
+
+文件输出任务可用 [JSON 断言](ASSERTIONS.md)，无需编写验证脚本；可直接跟做[完整案例](../examples/output-contract/README.md)。条件保存后会固化，修改输入 JSON 不会更新已保存验证器。
 
 `check --all` 在新的初始快照中执行每个案例的 setup 和验证器，不调用 Codex。退出 0 表示各验证器以 0（通过）或 1（行为失败）结束，**不代表全部行为通过**。任务尚未实现时，行为失败可能正是预期。退出 2 表示环境或执行故障。部分测试框架会把导入错误也归为 1，因此要看报告；必要时使用明确区分 0、1、2+ 的 Python 验证器。
 
@@ -102,7 +107,7 @@ rulebisect case list --json
 rulebisect check --all --open
 ```
 
-每个案例选择 `--check "命令"` 或 `--oracle verifier.py`。命令不会经过 shell 展开，不支持管道；多步骤放进脚本。Python 验证器必须位于仓库内。案例命令支持 `--repo PATH` 和 `--config PATH`。
+每个案例在 `--check "命令"`、`--oracle verifier.py`、`--assertions checks.json` 中选一项。命令不会经过 shell 展开，不支持管道；多步骤放进脚本。Python 验证器必须位于仓库内。案例命令支持 `--repo PATH` 和 `--config PATH`。
 
 `rulebisect case remove modern-labels` 只删除案例配置，**保留验证器文件**。除了原始失败任务，建议保留一个当前能正常工作的任务，用来发现修改后的回归。
 
@@ -134,5 +139,6 @@ rulebisect compare --proposed ../proposed-rules --open
 | 想定位触发失败的规则组合 | `plan`，然后 `run --open` |
 | 修改规则，担心破坏其他任务 | `draft`，局部 `compare --plan`，最后完整 `compare` |
 | 找不到刚才的报告 | `rulebisect report --latest --open` |
+| 只想分享结果，不带代码或日志 | `rulebisect share 证据目录 --out summary.html` |
 
 缩减生成的 `candidate/` 是更小的**失败复现**，不是修复建议。使用 `draft` 准备修复，再比较效果。

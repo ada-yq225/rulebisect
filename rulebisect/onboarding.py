@@ -8,6 +8,7 @@ import tomllib
 from pathlib import Path
 
 from .setup import CONFIG_NAME, discover_instructions, git_root, init_config
+from .assertions import validate_assertions
 
 
 _MANIFEST_LIMIT = 256 * 1024
@@ -82,8 +83,22 @@ def _command(value: str, label: str) -> str:
     return value
 
 
+def _builtin_assertions(kind, input_fn):
+    path = input_fn('Output file path inside the repository: ').strip()
+    if kind == ':exists':
+        spec = [{'type': 'file_exists', 'path': path}]
+    elif kind == ':contains':
+        spec = [{'type': 'file_contains', 'path': path,
+                 'text': input_fn('Required text (exact substring): ')}]
+    else:
+        pointer = input_fn('JSON pointer (e.g. /format; Enter for whole document): ')
+        value = json.loads(input_fn('Expected JSON value (e.g. "modern", true, 42): '))
+        spec = [{'type': 'json_equals', 'path': path, 'pointer': pointer, 'value': value}]
+    return validate_assertions(spec)
+
+
 def run_wizard(repo: Path, input_fn=input, print_fn=print) -> Path:
-    """Ask four questions, then create config and a verifier wrapper.
+    """Collect task/check details, then create config and a verifier wrapper.
 
     Every answer is collected and validated before init_config writes files.
     EOF and Ctrl-C leave the repository untouched.
@@ -112,9 +127,10 @@ def run_wizard(repo: Path, input_fn=input, print_fn=print) -> Path:
             print_fn('Possible checks — choose explicitly; these have not been run:')
             for number, suggestion in enumerate(suggestions, 1):
                 print_fn(f"  {number}. {suggestion['command']}\n     {suggestion['reason']}")
-        check = None
-        while check is None:
-            answer = input_fn('Check command (or suggestion number): ').strip()
+        print_fn('Built-in checks: :exists, :contains, :json. Or use @FILE for a saved JSON assertion list.')
+        check, assertions = None, None
+        while check is None and assertions is None:
+            answer = input_fn('Check command, suggestion number or built-in check: ').strip()
             if answer.isdecimal():
                 number = int(answer)
                 if not 1 <= number <= len(suggestions):
@@ -122,8 +138,15 @@ def run_wizard(repo: Path, input_fn=input, print_fn=print) -> Path:
                     continue
                 answer = suggestions[number - 1]['command']
             try:
-                check = _command(answer, 'Check')
-            except ValueError as error:
+                if answer in (':exists', ':contains', ':json'):
+                    assertions = _builtin_assertions(answer, input_fn)
+                elif answer.startswith('@'):
+                    assertions = validate_assertions(json.loads(Path(answer[1:]).read_text(encoding='utf-8')))
+                else:
+                    check = _command(answer, 'Check')
+            except RecursionError:
+                print_fn('Assertions JSON is nested too deeply; use a flat list of output checks.')
+            except (ValueError, OSError) as error:
                 print_fn(str(error))
         setup = None
         while True:
@@ -136,12 +159,15 @@ def run_wizard(repo: Path, input_fn=input, print_fn=print) -> Path:
             except ValueError as error:
                 print_fn(str(error))
         model = input_fn('Optional Codex model (Enter to choose when running): ').strip() or None
-        print_fn(f'Task: {task}\nCheck: {check}\nSetup: {setup or "none"}\nModel: {model or "choose when running"}')
+        check_label = check if assertions is None else f'{len(assertions)} built-in output assertions'
+        print_fn(f'Task: {task}\nCheck: {check_label}\nSetup: {setup or "none"}\nModel: {model or "choose when running"}')
     except (EOFError, KeyboardInterrupt) as error:
         raise ValueError('Setup cancelled; no files written.') from error
-    path = init_config(repo, task, check, model, instructions=instructions, setup=setup)
+    path = init_config(repo, task, check, model, instructions=instructions, setup=setup, assertions=assertions)
     print_fn(f'Created {path}')
     quoted_repo = shlex.quote(str(repo))
     print_fn(f'Next: rulebisect doctor --offline --repo {quoted_repo}\nThen: rulebisect check --all --open --repo {quoted_repo}')
     print_fn('Review protected_files and instructions in the config before running Codex.')
+    if assertions is not None:
+        print_fn('Assertions are frozen in the generated verifier; editing an input JSON does not change saved criteria.')
     return path
