@@ -6,7 +6,21 @@
 
 永久免费 · MIT 开源 · 只支持 Codex · 本地运行 · 无遥测。真实实验使用**你本机 Codex CLI 的登录身份和账户额度**，模型调用仍可能产生费用；配置、规划、验证器检查和确定性演示不调用模型。当前为实验性工具。
 
-[先看演示](#先看效果无需-codex-账户) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
+[先看演示](#先看效果无需-codex-账户) · [使用 Codex Skill](#作为-codex-skill-使用) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
+
+## 作为 Codex Skill 使用
+
+[RuleBisect Skill](plugins/rulebisect/skills/rulebisect/SKILL.md) 引导配置、独立验证、有预算的实验和证据解读。内置引擎，无需 pip 安装；需要 Python 3.11+ 和 Git。真实实验还需要已登录的 Codex CLI。
+
+使用支持插件的 Codex CLI 添加仓库来源，然后在桌面应用的 Plugins Directory 中选择 RuleBisect 并安装：
+
+```sh
+codex plugin marketplace add ada-yq225/rulebisect
+```
+
+在新对话中输入：**`用 $rulebisect 演示一次指令回归，不调用模型。`** 匹配指令实验的请求也可自动选中 Skill。安装不会启动实验；已有授权会沿用，真实实验需要约定模型和执行预算。
+
+也可安装独立 Skill，见[安装与 OpenAI 投稿指南](docs/OPENAI-SUBMISSION.md)。选择一种安装方式，避免重复加载。OpenAI 公开目录投稿尚待开发者验证；GitHub 仓库来源可以单独使用。[隐私与本地数据](PRIVACY.md)。
 
 ## 看动图了解流程
 

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "rulebisect",
+  "version": "0.1.0",
+  "description": "Investigate reproducible Codex instruction failures and compare proposed repository rules with independent checks.",
+  "author": {
+    "name": "ada-yq225",
+    "url": "https://github.com/ada-yq225"
+  },
+  "homepage": "https://github.com/ada-yq225/rulebisect",
+  "repository": "https://github.com/ada-yq225/rulebisect",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "instructions",
+    "regression-testing",
+    "delta-debugging"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "RuleBisect",
+        "shortDescription": "Debug Codex rules",
+        "longDescription": "Investigate reproducible Codex repository-instruction failures, reduce a failing instruction set, and compare proposed rules across independent task checks. Includes the local RuleBisect engine: Python 3.11+ and Git are required; real experiments also require the installed, authenticated Codex CLI and use the user's model quota or billing within an agreed execution budget. Setup, planning, verifier checks, saved-report review and deterministic demos make no model calls. Reports distinguish simulations, verifier checks, regressions and uncertain observations. A reduced candidate is a failing reproducer, not a verified repair or proof of causation. This skill is for Codex execution environments with access to the user's repository.",
+        "developerName": "ada-yq225",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Investigate instruction failures",
+          "Compare task regressions",
+          "Review local evidence"
+        ],
+        "websiteURL": "https://github.com/ada-yq225/rulebisect",
+        "supportURL": "https://github.com/ada-yq225/rulebisect/issues",
+        "privacyPolicyURL": "https://github.com/ada-yq225/rulebisect/blob/main/PRIVACY.md",
+        "termsOfServiceURL": "https://github.com/ada-yq225/rulebisect/blob/main/LICENSE",
+        "defaultPrompt": [
+          "Show me an instruction regression demo without calling a model.",
+          "Help define an independent check for my Codex task.",
+          "Review my saved RuleBisect evidence and explain the next step."
+        ],
+        "brandColor": "#087F70",
+        "brandColorDark": "#64D4B3",
+        "composerIcon": "./assets/rulebisect.svg",
+        "logo": "./assets/rulebisect.svg"
+      },
+      "publication": {
+        "release_notes": "Initial self-contained Codex Skill distribution with RuleBisect engine 0.7.0, bounded experiment workflows and offline evidence.",
+        "translations": {
+          "zh-CN": {
+            "subtitle": "排查 Codex 指令与任务回退",
+            "description": "用独立检查复现指令相关失败，缩减失败候选，对照拟议规则并查看本地证据。需要 Python 3.11+ 和 Git；真实实验使用本机 Codex 登录及额度，并受已同意的执行预算限制。"
+          }
+        }
+      }
+    }
+  }
+}

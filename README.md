@@ -6,7 +6,21 @@ Give RuleBisect a task and an executable result check. It shrinks reproducible i
 
 Permanently free · MIT licensed · Codex only · Local-first · No telemetry. Alpha software. **Real experiments use your installed Codex CLI, login and account quota or billing.** Setup, planning, verifier checks and deterministic demos make no model calls.
 
-[Try a demo](#see-what-it-does--no-codex-account-needed) · [Start with your repository](docs/QUICKSTART.md) · [Read the evidence](docs/REPORTS.md) · [中文说明](README.zh-CN.md)
+[Try a demo](#see-what-it-does--no-codex-account-needed) · [Use the Codex Skill](#use-as-a-codex-skill) · [Start with your repository](docs/QUICKSTART.md) · [Read the evidence](docs/REPORTS.md) · [中文说明](README.zh-CN.md)
+
+## Use as a Codex Skill
+
+The [RuleBisect Skill](plugins/rulebisect/skills/rulebisect/SKILL.md) guides setup, independent checks, bounded experiments and evidence review. Its engine is bundled: Python 3.11+ and Git are required, with no pip install. Real experiments also need your authenticated Codex CLI.
+
+Add the repository marketplace with a Codex CLI that supports plugins, then choose RuleBisect in the desktop Plugins Directory and install it:
+
+```sh
+codex plugin marketplace add ada-yq225/rulebisect
+```
+
+In a new chat, try: **`Use $rulebisect to show an instruction regression demo without calling a model.`** The installed skill also supports automatic selection for matching instruction-experiment requests. Installation does not run experiments. Existing task authorization is respected; real experiments need an agreed model and execution budget.
+
+Prefer a standalone Skill? See [installation and OpenAI submission](docs/OPENAI-SUBMISSION.md). Choose one installation method to avoid duplicate skills. The public OpenAI directory submission is pending developer verification; this GitHub marketplace is available separately. [Privacy and local data](PRIVACY.md).
 
 ## Watch the workflow
 

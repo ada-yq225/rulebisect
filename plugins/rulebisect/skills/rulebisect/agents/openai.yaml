@@ -1,0 +1,7 @@
+interface:
+  display_name: "RuleBisect"
+  short_description: "Debug Codex rules and check instruction regressions"
+  default_prompt: "Use $rulebisect to investigate a reproducible instruction failure or compare proposed rules in my repository."
+policy:
+  products: ["CODEX"]
+  allow_implicit_invocation: true

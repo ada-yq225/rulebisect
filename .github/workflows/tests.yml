@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+      - name: Check the bundled Skill engine against canonical source
+        run: python scripts/build_skill_plugin.py --check
       - run: python -m unittest discover -s tests -v
       - run: python -m rulebisect demo --out demo-evidence
       - run: python -m rulebisect demo --scenario regression --out regression-evidence

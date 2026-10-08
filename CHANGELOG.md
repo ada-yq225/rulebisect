@@ -1,5 +1,13 @@
 # Changelog
 
+## Skill / plugin 0.1.0 — Bundled Codex workflow
+
+- Added a Codex-only Skill for experiment setup, independent acceptance checks, instruction reduction, proposed-rule comparisons and saved evidence review. Its entrypoint includes RuleBisect engine 0.7.0 and requires no pip install.
+- Reuse existing session authorization; establish a model and execution budget before real Codex calls. Keep simulations, verification and model evidence distinct, and interpret finite observations without causal or global-minimality claims.
+- Added a portable skills-only plugin manifest, original SVG icon, GitHub marketplace, standalone Skill ZIP, privacy description and bilingual installation/submission guide.
+- Added fixed-allowlist vendoring and reproducible ZIP packaging, plus isolated launcher and extracted-package workflow checks. No MCP server, account collection, lifecycle hooks or automatic uploads.
+- OpenAI public-directory submission awaits the owner's developer verification. GitHub distribution does not indicate OpenAI acceptance; the CLI engine remains version 0.7.0.
+
 ## 0.7.0 — An evidence workspace you can navigate
 
 - Rebuilt local reports around the outcome and next action, with explicit Codex/simulation/verifier-only source badges and section navigation.
