@@ -152,7 +152,9 @@ class InitIntegrityTests(unittest.TestCase):
         with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
             code = main(['init', '--repo', str(self.repo), '--task', 'Task', '--assertions', str(source)])
         self.assertEqual(code, 2)
-        self.assertIn('nested too deeply', stderr.getvalue())
+        # JSON decoder recursion thresholds differ across Python versions. If
+        # decoding succeeds, the nested list is still an invalid assertion item.
+        self.assertRegex(stderr.getvalue(), r'nested too deeply|Assertion 1 must be an object')
         self.assertNotIn('Traceback', stderr.getvalue())
         self.assert_unconfigured()
         init_config(self.repo, 'Task', None, None, oracle='verify.py')
@@ -168,8 +170,14 @@ class InitIntegrityTests(unittest.TestCase):
         source.write_text('[' * 2000 + '0' + ']' * 2000, encoding='utf-8')
         answers = iter(['Task', '@' + str(source), ':exists', 'result.txt', '', ''])
         messages = []
-        run_wizard(self.repo, input_fn=lambda _: next(answers), print_fn=messages.append)
-        self.assertTrue(any('nested too deeply' in message for message in messages))
+        def ask(_):
+            answer = next(answers)
+            if answer == ':exists':
+                self.assert_unconfigured()
+            return answer
+        run_wizard(self.repo, input_fn=ask, print_fn=messages.append)
+        self.assertTrue(any('nested too deeply' in message or 'Assertion 1 must be an object' in message
+                            for message in messages))
         config = json.loads(self.config.read_text(encoding='utf-8'))
         self.assertEqual(config['oracle'], '.rulebisect-verify.py')
         self.assertIn('file_exists', self.wrapper.read_text(encoding='utf-8'))
@@ -180,6 +188,54 @@ class InitIntegrityTests(unittest.TestCase):
         messages = []
         run_wizard(self.repo, input_fn=lambda _: next(answers), print_fn=messages.append)
         self.assertTrue(any('nested too deeply' in message for message in messages))
+        self.assertIn('file_exists', self.wrapper.read_text(encoding='utf-8'))
+
+    def test_cli_handles_decoder_recursion_error_without_partial_writes(self):
+        source = self.root / 'decoder-error.json'
+        payload = '[{"type":"file_exists","path":"result.txt"}]'
+        source.write_text(payload, encoding='utf-8')
+        original_loads = json.loads
+        def decoder(value, *args, **kwargs):
+            if value == payload:
+                raise RecursionError('injected decoder recursion limit')
+            return original_loads(value, *args, **kwargs)
+        stderr = io.StringIO()
+        with patch('rulebisect.cli.json.loads', side_effect=decoder), \
+                contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
+            code = main(['init', '--repo', str(self.repo), '--task', 'Task', '--assertions', str(source)])
+        self.assertEqual(code, 2)
+        self.assertIn('nested too deeply', stderr.getvalue())
+        self.assertNotIn('Traceback', stderr.getvalue())
+        self.assert_unconfigured()
+        init_config(self.repo, 'Task', None, None, oracle='verify.py')
+        original = self.config.read_bytes()
+        with patch('rulebisect.cli.json.loads', side_effect=decoder), \
+                contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
+            code = main(['case', 'add', 'new', '--repo', str(self.repo), '--task', 'Task', '--assertions', str(source)])
+        self.assertEqual(code, 2)
+        self.assertEqual(self.config.read_bytes(), original)
+        self.assertFalse((self.repo / '.rulebisect').exists())
+
+    def test_wizard_reprompts_after_decoder_recursion_error(self):
+        source = self.root / 'decoder-error.json'
+        payload = '[{"type":"file_exists","path":"result.txt"}]'
+        source.write_text(payload, encoding='utf-8')
+        original_loads = json.loads
+        def decoder(value, *args, **kwargs):
+            if value == payload:
+                raise RecursionError('injected decoder recursion limit')
+            return original_loads(value, *args, **kwargs)
+        answers = iter(['Task', '@' + str(source), ':exists', 'result.txt', '', ''])
+        messages = []
+        def ask(_):
+            answer = next(answers)
+            if answer == ':exists':
+                self.assert_unconfigured()
+            return answer
+        with patch('rulebisect.onboarding.json.loads', side_effect=decoder):
+            run_wizard(self.repo, input_fn=ask, print_fn=messages.append)
+        self.assertTrue(any('nested too deeply' in message for message in messages))
+        self.assertTrue(self.config.is_file())
         self.assertIn('file_exists', self.wrapper.read_text(encoding='utf-8'))
 
 

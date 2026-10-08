@@ -44,6 +44,8 @@ a fix to apply.
 The checks are frozen into protected, standalone Python verifiers when saved.
 Changing `checks.json` later does not change those criteria. The contract files
 validate only the stated output properties, not a general label-exporting API.
+`result.json` stays unignored so full trial diffs can retain the generated output;
+those full reports may contain private content. The share summary excludes it.
 See [all assertion types](../../docs/ASSERTIONS.md).
 
 ## 中文

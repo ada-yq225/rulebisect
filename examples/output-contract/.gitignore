@@ -1,2 +1,2 @@
-result.json
+# Keep result.json unignored so trial diffs can retain the produced output.
 debug.log
