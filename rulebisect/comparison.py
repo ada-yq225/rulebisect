@@ -32,6 +32,34 @@ def suite_cases(config):
     return result
 
 
+def select_cases(config, names=None):
+    """Select an explicit subset while retaining its scope in saved evidence."""
+    all_cases = suite_cases(config)
+    available = [name for name, _ in all_cases]
+    selected = available if names is None else list(names)
+    if not selected or len(set(selected)) != len(selected) or any(name not in available for name in selected):
+        raise ValueError('Choose unique case ids from: ' + ', '.join(available))
+    result = copy.deepcopy(config)
+    values = result.get('cases', [{'id': 'task'}])
+    result['cases'] = [case for case in values if case['id'] in selected]
+    # Filtering changes calls, not the available verifier/dependency snapshot.
+    protected = set()
+    for _, case in all_cases:
+        files = case.get('protected_files', [])
+        if not isinstance(files, list) or any(not isinstance(v, str) for v in files):
+            raise ValueError('protected_files must be a list of paths')
+        oracle = case.get('oracle')
+        if not isinstance(oracle, str):
+            raise ValueError('Every case requires an oracle')
+        protected.update(files)
+        protected.add(oracle)
+    for case in result['cases']:
+        case['protected_files'] = sorted(protected)
+    result['_case_selection'] = {'available': available, 'selected': [case['id'] for case in result['cases']],
+                                 'omitted': [name for name in available if name not in selected]}
+    return result
+
+
 def load_candidate(root, instructions):
     root = root.resolve()
     if not root.is_dir():
@@ -104,13 +132,16 @@ class Comparison:
                            status='pending', message='Prepared before/after comparison.', max_runs=self.max_runs,
                            max_tokens=self.max_tokens, candidate_snapshot_sha256=candidate_hash,
                            required_calls=required, candidate_instruction_hashes={name: digest(value[0]) for name, value in self.experiments[cases[0][0], 'candidate'].blobs.items() if name in first.instruction_paths})
+        self.report['case_selection'] = copy.deepcopy(self.config.get('_case_selection',
+            {'available': [name for name, _ in cases], 'selected': [name for name, _ in cases], 'omitted': []}))
         for name, config in cases:
             self.report['cases'].append({'id': name, 'task': config['task'], 'oracle': config['oracle'], 'baseline': None, 'candidate': None, 'verdict': 'pending'})
         return {'cases': [name for name, _ in cases], 'variants': ['baseline', 'candidate'],
                 'instruction_files': first.instruction_paths, 'required_calls': required,
                 'max_runs': self.max_runs, 'max_tokens': self.max_tokens, 'model': self.model,
                 'snapshot_sha256': first.report['snapshot_sha256'], 'candidate_snapshot_sha256': candidate_hash,
-                'setup': self.config.get('setup', []), 'output': str(self.out), 'model_calls': 0}
+                'setup': self.config.get('setup', []), 'output': str(self.out), 'model_calls': 0,
+                'case_selection': self.report['case_selection']}
 
     def record_trial(self, exp, case, arm):
         before = len(exp.report['trials'])

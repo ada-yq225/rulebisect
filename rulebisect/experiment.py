@@ -179,8 +179,9 @@ class Experiment:
                    for trial in self.report["trials"] for usage in trial.get("codex", {}).get("reported_usage", [])
                    if isinstance(usage, dict))
 
-    def check_initial(self):
-        self.prepare(check_codex=False)
+    def check_initial(self, *, prepared=False):
+        if not prepared:
+            self.prepare(check_codex=False)
         with tempfile.TemporaryDirectory(prefix="rulebisect-check-") as temporary:
             workspace = Path(temporary) / "repo"
             workspace.mkdir()
@@ -188,7 +189,7 @@ class Experiment:
             setup = self.setup_workspace(workspace, self.out / "setup.log", [r.id for r in self.rules])
             self.report["setup_check"] = setup
             result = run_process(self.verify_command(), workspace, self.out / "check.log", self.timeout) if setup.get("exit_code") == 0 else {"exit_code": 2, "reason": "Environment setup failed; see setup.log"}
-        self.report.update(status="check_only", message="Initial snapshot check completed. No Codex or model calls made; inspect setup/check results.", verifier_check=result)
+        self.report.update(kind="check", runner="verifier_only", requested_model=None, status="check_only", message="Initial snapshot check completed. No Codex or model calls made; inspect setup/check results.", verifier_check=result)
         write_report(self.out, self.report)
         return result
 

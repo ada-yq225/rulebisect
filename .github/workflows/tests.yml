@@ -21,3 +21,6 @@ jobs:
       - name: Smoke test the installed wheel outside the source checkout
         working-directory: ${{ runner.temp }}
         run: rulebisect demo --scenario fix --out installed-wheel-evidence
+      - name: Exercise the installed guided workflow
+        working-directory: ${{ runner.temp }}
+        run: python "${{ github.workspace }}/.github/scripts/smoke_workflow.py" "${{ github.workspace }}"

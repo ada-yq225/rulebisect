@@ -9,7 +9,10 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
-from .comparison import Comparison
+from .comparison import Comparison, select_cases
+from .checks import SuiteCheck
+from .onboarding import run_wizard
+from .suite import add_case, list_cases, remove_case
 from .history import history, latest_report
 from .core import split_rules
 from .demo import run_demo, run_comparison_demo
@@ -45,6 +48,8 @@ def experiment_from(args):
         raise ValueError('Config must be a JSON object')
     if args.unit_mode:
         config['unit_mode'] = args.unit_mode
+    if args.command == 'compare' or (args.command == 'check' and getattr(args, 'all', False)):
+        config = select_cases(config, getattr(args, 'cases', None))
     model = args.model or config.get('model')
     repeats = args.repeats if args.repeats is not None else config.get('repeats', 3)
     max_runs = args.max_runs if args.max_runs is not None else config.get('max_runs', 60)
@@ -71,10 +76,11 @@ def main(argv=None) -> int:
     demo.add_argument('--open', action='store_true', help='Open the local HTML report')
     init = commands.add_parser('init', help='Discover instructions and generate config + trusted check wrapper')
     init.add_argument('--repo', type=Path, default=Path.cwd())
-    init.add_argument('--task', required=True)
+    init.add_argument('--task')
+    init.add_argument('--wizard', action='store_true', help='Guided task/check setup with repository command suggestions; no model calls')
     init.add_argument('--model')
     init.add_argument('--setup', help='Quoted environment command executed before every trial, e.g. "npm ci"')
-    verifier = init.add_mutually_exclusive_group(required=True)
+    verifier = init.add_mutually_exclusive_group()
     verifier.add_argument('--check', help='Quoted command, e.g. "python -m unittest discover -s tests"; no shell expansion')
     verifier.add_argument('--oracle', help='Existing repository-relative Python verifier (exit 0/1/2+)')
     init.add_argument('--instructions', nargs='+', help='Override automatic AGENTS.md selection; Skills are opt-in')
@@ -94,6 +100,9 @@ def main(argv=None) -> int:
     plan.add_argument('--json', action='store_true')
     check = commands.add_parser('check', help='Test the verifier on a fresh initial snapshot; no model calls')
     add_experiment_options(check)
+    check.add_argument('--all', action='store_true', help='Check setup and verifier for every suite case without Codex')
+    check.add_argument('--cases', nargs='+', help='Select case ids when using --all')
+    check.add_argument('--open', action='store_true')
     run = commands.add_parser('run', help='Run an experiment using your local Codex login and quota')
     add_experiment_options(run)
     run.add_argument('--open', action='store_true', help='Open the completed HTML report')
@@ -113,6 +122,22 @@ def main(argv=None) -> int:
     compare.add_argument('--proposed', '--candidate', dest='candidate', type=Path, required=True, help='Directory containing replacements at the selected instruction paths')
     compare.add_argument('--plan', action='store_true', help='Validate and show exact planned calls without Codex or artifacts')
     compare.add_argument('--open', action='store_true')
+    compare.add_argument('--cases', nargs='+', help='Run only these case ids; omitted tasks remain explicitly untested')
+    case = commands.add_parser('case', help='Save, list and remove regression cases without editing JSON')
+    case_commands = case.add_subparsers(dest='case_command', required=True)
+    for name in ('list', 'add', 'remove'):
+        action = case_commands.add_parser(name)
+        action.add_argument('--repo', type=Path, default=Path.cwd())
+        action.add_argument('--config', type=Path)
+        if name == 'list':
+            action.add_argument('--json', action='store_true')
+        else:
+            action.add_argument('id')
+        if name == 'add':
+            action.add_argument('--task', required=True)
+            verification = action.add_mutually_exclusive_group(required=True)
+            verification.add_argument('--check', help='Trusted command; saved but not executed')
+            verification.add_argument('--oracle', help='Existing repository-relative verifier')
     draft = commands.add_parser('draft', help='Copy selected instructions outside the repo for editing and comparison')
     draft.add_argument('--repo', type=Path, default=Path.cwd())
     draft.add_argument('--out', type=Path, required=True)
@@ -121,6 +146,24 @@ def main(argv=None) -> int:
     hist.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'case':
+            repo = git_root(args.repo)
+            path = args.config or repo / CONFIG_NAME
+            if args.case_command == 'list':
+                values = list_cases(path)
+                if args.json:
+                    print(json.dumps(values, ensure_ascii=False, indent=2))
+                else:
+                    for value in values:
+                        print(f"{value['id']}: {value['task']}\n  verifier: {value['oracle']}")
+                    print(f'{len(values)} cases. No model calls.')
+            elif args.case_command == 'add':
+                result = add_case(repo, path, args.id, args.task, check=args.check, oracle=args.oracle)
+                print(f"Saved case {result['id']}. Next: rulebisect check --all --repo \"{repo}\" --config \"{path}\"\nNo model calls; check command was not executed.")
+            else:
+                remove_case(path, args.id)
+                print(f'Removed case {args.id}; verifier files preserved. No model calls.')
+            return 0
         if args.command == 'draft':
             repo = git_root(args.repo)
             result = draft_instructions(repo, args.out)
@@ -140,6 +183,13 @@ def main(argv=None) -> int:
             return 0
         if args.command == 'init':
             repo = git_root(args.repo)
+            if args.wizard:
+                if any((args.task, args.check, args.oracle, args.model, args.setup, args.instructions)):
+                    raise ValueError('Use init --wizard --repo PATH, or provide explicit init options without --wizard')
+                run_wizard(repo)
+                return 0
+            if not args.task or not (args.check or args.oracle):
+                raise ValueError('Use init --wizard, or provide --task and --check/--oracle')
             path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup)
             print(f'Created {path}\nNext: rulebisect plan\nThen: rulebisect check (test the verifier without Codex)\nFinally: rulebisect run')
             if not args.model:
@@ -215,8 +265,20 @@ def main(argv=None) -> int:
                     print('No model calls. Actual runs depend on results; the run cap may stop before confirmation.')
                 return 0
             if args.command == 'check':
+                if args.cases and not args.all:
+                    raise ValueError('Use check --all --cases ID ... to check selected suite cases')
+                if args.all:
+                    config = dict(experiment.config, model=experiment.model, repeats=experiment.repeats,
+                                  max_runs=experiment.max_runs, timeout=experiment.timeout, max_tokens=experiment.max_tokens)
+                    report = SuiteCheck(experiment.repo, config, out).execute()
+                    print(f"{report['status']}: {report['message']}\nReport: {out / 'report.html'}")
+                    if args.open:
+                        webbrowser.open((out.resolve() / 'report.html').as_uri())
+                    return 0 if report['status'] == 'checks_completed' else 2
                 result = experiment.check_initial()
                 print(f'Verifier on original snapshot: {result}\nNo Codex calls. Log: {out / "check.log"}')
+                if args.open:
+                    webbrowser.open((out.resolve() / 'report.html').as_uri())
                 return 0 if result.get('exit_code') in (0, 1) else 2
             if not experiment.model:
                 raise ValueError('Choose --model MODEL, or save model with init --model MODEL.')

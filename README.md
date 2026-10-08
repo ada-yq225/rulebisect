@@ -2,7 +2,7 @@
 
 [中文说明](README.zh-CN.md)
 
-**Investigate which repository instructions change a failing Codex task's outcome.**
+**Debug Codex rules. Keep the fix from breaking another task.**
 
 Provide a task and an independent check. RuleBisect runs local Codex in fresh repository copies, shrinks failing instruction sets, and leaves an inspectable evidence bundle. It reports uncertainty instead of inventing a conflict.
 
@@ -23,7 +23,15 @@ The first catches a proposed rule that fixes modern labels but breaks legacy lab
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. Install from this source checkout (not published on PyPI yet):
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.5.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.5.0) includes an installable wheel; the project is not on PyPI yet.
+
+For a release install, create and activate a virtual environment, then:
+
+```sh
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.5.0/rulebisect-0.5.0-py3-none-any.whl
+```
+
+Or install from source:
 
 ```sh
 git clone https://github.com/ada-yq225/rulebisect.git
@@ -35,7 +43,18 @@ python3 -m venv .venv
 python -m pip install .
 ```
 
-Inside the Git repository you want to investigate:
+Inside the Git repository you want to investigate, start with the guided flow:
+
+```sh
+rulebisect init --wizard
+rulebisect doctor --offline
+rulebisect check --all --open
+rulebisect run --model YOUR_CODEX_MODEL_ID --open
+```
+
+The wizard asks four questions: concrete task, independent check, optional environment setup, optional model. It suggests commands based on project manifests; you must choose explicitly. It does not install dependencies or run checks/model calls. Configuration creation is the only write. Review `instructions` and `protected_files` before a real run.
+
+You can also configure directly:
 
 ```sh
 rulebisect init \
@@ -78,10 +97,11 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 | Command | Purpose | Model calls |
 |---|---|---|
 | `doctor` | Check Python, Git, Codex version, login and setup | No |
-| `init` | Generate configuration and an independent check wrapper | No |
+| `init --wizard` / `init` | Generate configuration and an independent check wrapper | No |
 | `inspect` | Show instruction units with original file/line references | No |
 | `plan` | Validate inputs and preview scope/budget | No |
-| `check` | Run the verifier on the initial snapshot | No |
+| `check` / `check --all` | Check one verifier or every suite case on initial snapshots | No |
+| `case add/list/remove` | Manage regression cases without editing JSON | No |
 | `run` | Run baseline, reduction and fresh confirmation | Yes |
 | `resume --from EVIDENCE` | Reuse matching stable search evidence in a new output directory | Yes |
 | `draft --out DIRECTORY` | Make an editable instruction copy; preserve the original baseline | No |
@@ -106,6 +126,20 @@ rulebisect run --unit-mode file
 
 Options can be saved as `repeats`, `max_runs`, `max_tokens`, `timeout`, `unit_mode`, `model` in `.rulebisect.json`; CLI options override them.
 
+## Save working tasks as regression cases
+
+```sh
+rulebisect case add existing-feature \
+  --task "Implement the existing feature contract." \
+  --check "python -m unittest tests.test_existing_feature"
+rulebisect case list
+rulebisect check --all --open
+```
+
+Your original task remains in the suite. `case add` accepts either a trusted check command or `--oracle existing-verifier.py`; no command or model is executed. Configuration changes are atomic. `case remove ID` removes the entry and keeps verifier files. IDs are portable, unique names; the last case cannot be removed. Case commands accept `--repo` and `--config`.
+
+`check --all` runs setup and each verifier on its own frozen initial snapshot, then produces a combined report. Exit 0 means all checks returned 0 or 1; **it does not mean every behavior passed**. Initial unimplemented tasks may fail as expected. Exit 2 means infrastructure trouble or interruption. Check assertions/logs: some frameworks use exit 1 for setup/import errors too. This checks the local verifier environment, not Codex's sandbox.
+
 ## Check a proposed fix before applying it
 
 Finding a failing instruction subset is only the first step. Validate your proposed change on the original task and on tasks that already work:
@@ -116,6 +150,15 @@ rulebisect draft --out ../proposed-rules
 rulebisect compare --proposed ../proposed-rules --plan
 rulebisect compare --proposed ../proposed-rules --open
 ```
+
+For a quick selected comparison:
+
+```sh
+rulebisect compare --proposed ../proposed-rules --cases existing-feature --plan
+rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
+```
+
+The report explicitly lists omitted cases; a passing subset does not validate them. Run the full suite before applying shared rule changes. `check --all --cases ID ...` checks selected environments without Codex. See the [bilingual workflow guide](docs/QUICKSTART.md) for a complete first-task-to-regression example.
 
 No suite configuration is required for a single task: comparison reuses the task and verifier saved by `init`. For several tasks, add a `cases` array to the same config:
 

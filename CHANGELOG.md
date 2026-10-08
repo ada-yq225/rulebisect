@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — From one failure to a regression workflow
+
+- Guided initialization collects a task, explicit check choice, optional setup and model. Repository manifests provide suggestions; commands are never inferred and executed automatically.
+- Save, list and remove cases without editing JSON. Existing tasks remain in the suite; generated verifiers are protected, configuration writes are atomic and removing cases preserves files.
+- Check every setup/verifier on independent frozen snapshots without Codex. A combined offline report separates behavior failures from infrastructure problems before spending model quota.
+- Select case ids for smaller comparisons, with exact planned calls and prominently disclosed omitted cases in JSON, HTML, Markdown and issue summaries.
+- Added a bilingual workflow guide, current public demand evidence and focused onboarding/suite regression coverage.
+- Single verifier reports now identify the runner as verifier-only instead of implying a model execution.
+
 ## 0.4.2
 
 - Doctor now validates experiment snapshots, verifier roles, instruction units, all suite cases and saved budgets using the same checks as actual experiments.

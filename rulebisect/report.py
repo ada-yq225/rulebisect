@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 STATUS = {
+    'checks_completed': ('验证器已运行 / Checks completed', '验证器均返回 0 或 1；初始代码的行为失败可能符合预期。检查断言后再运行 Codex。'),
+    'checks_failed': ('验证环境有问题 / Checks failed', '检查各用例的 setup/check 日志，修复运行环境后再调用 Codex。'),
     'no_regressions_observed': ('未观察到回退 / No regressions observed', '候选修改在所选任务中反复通过。审查差异后再应用；其他任务仍可能失败。'),
     'regressions_observed': ('发现任务回退 / Regressions observed', '候选修改使原本通过的任务失败。检查回退行的验证日志，暂缓应用。'),
     'candidate_failed': ('候选仍失败 / Candidate failed', '候选修改未通过全部任务，查看仍失败的任务；不要把它当成已验证修复。'),
@@ -58,6 +60,21 @@ def comparison_html(report):
     return '<h2>修改前后 / Before vs after</h2><p>每个任务使用独立验证器，从同一初始代码开始；两组运行顺序交替。有限观察不能保证其他任务也通过。</p><p><a href="proposed.patch">查看拟议指令差异 / Proposed diff</a></p><div class="table"><table class="comparison-matrix"><tr class="matrix-header"><th>Task</th><th>原始 / Baseline</th><th>拟议 / Proposed</th><th>结果 / Verdict</th></tr>' + rows + '</table></div>'
 
 
+def selection_text(report):
+    selection = report.get('case_selection', {})
+    omitted = selection.get('omitted', [])
+    return ('仅检查所选用例 / Partial suite. Omitted: ' + ', '.join(omitted) +
+            '. These tasks were not checked; passing results do not cover them.') if omitted else ''
+
+
+def checks_html(report):
+    e = html.escape
+    rows = ''.join(f'<tr><td>{e(case["id"])}</td><td>{e(case["outcome"])}</td><td>{e(str((case.get("result") or {}).get("exit_code", "—")))}</td>'
+                   '<td>' + (f'<a href="cases/{e(case["id"])}/report.html">Case report</a>' if case.get('result') else 'Not run') + '</td></tr>' for case in report['cases'])
+    return ('<h2>验证器环境 / Verifier checks</h2><p>0 = 当前代码通过；1 = 行为失败（可能符合预期）；其他结果 = 环境或运行错误。执行检查不会运行 Codex。</p>'
+            '<div class="table"><table><tr><th>Task</th><th>Outcome</th><th>Exit</th><th>Evidence</th></tr>' + rows + '</table></div>')
+
+
 def write_report(out: Path, report: dict) -> None:
     out.mkdir(parents=True, exist_ok=True)
     report['usage_totals'] = token_totals(report)
@@ -67,9 +84,12 @@ def write_report(out: Path, report: dict) -> None:
     label, action = STATUS.get(report['status'], (report['status'], 'Review the evidence.'))
     if report.get('kind') == 'comparison' and report['status'] in ('inconclusive', 'interrupted'):
         action = '查看用例日志，调整验证器或预算后，在新目录重新执行 compare。本版对照实验不能续跑。'
+    if report.get('kind') == 'checks' and report['status'] == 'interrupted':
+        action = '在新目录重新执行 check --all；验证器检查不能续跑。'
+    model_label = report.get('requested_model') or ('not invoked' if report.get('kind') in ('check', 'checks') else 'simulation')
     md = ['# RuleBisect experimental report', '', f"Status: **{report['status']}**", '', report['message'], '',
           f"Runner: {report['runner']} | Executions: {len(report['trials'])}/{report['max_runs']}", '',
-          f"Requested model: {report.get('requested_model') or 'simulation'}", '', '## Next step', '', action, '',
+          f"Requested model: {model_label}", '', '## Next step', '', action, '',
           '## Task', '', report.get('task', ''), '',
           'These are finite observations, not proof of causation, statistical confidence or a globally smallest subset.', '',
           '## Retained instruction units', '']
@@ -82,7 +102,15 @@ def write_report(out: Path, report: dict) -> None:
         md += ['## Before / after tasks', '', '| Task | Before | After | Verdict |', '|---|---|---|---|']
         for case in report['cases']:
             md.append(f"| {case['id']} | {case_summary(case.get('baseline'))} | {case_summary(case.get('candidate'))} | {case['verdict']} |")
-    if report.get('kind') != 'comparison':
+    if report.get('kind') == 'checks':
+        md = md[:-2]
+        md += ['## Verifier checks', '', '| Task | Outcome | Exit | Evidence |', '|---|---|---|---|']
+        for case in report['cases']:
+            evidence = f"[report](cases/{case['id']}/report.html)" if case.get('result') else 'Not run'
+            md.append(f"| {case['id']} | {case['outcome']} | {(case.get('result') or {}).get('exit_code')} | {evidence} |")
+    if selection_text(report):
+        md += ['', selection_text(report), '']
+    if report.get('kind') not in ('comparison', 'checks'):
         md += ['## Evaluations', '', '| Phase | Units | Pass | Fail | Error | Outcome |', '|---|---|---:|---:|---:|---|']
         for ev in report.get('evaluations', []):
             md.append(f"| {ev['phase']} | {ev['ids']} | {ev['pass']} | {ev['fail']} | {ev['error']} | {ev['outcome']} |")
@@ -96,6 +124,8 @@ def write_report(out: Path, report: dict) -> None:
     if report.get('kind') == 'comparison':
         issue[5] = f"Runs: {len(report['trials'])}; tasks: {len(report['cases'])}"
         issue += ['', '## Task outcomes', ''] + [f"- {case['id']}: {case['verdict']}" for case in report['cases']]
+    if selection_text(report):
+        issue += ['', selection_text(report)]
     atomic_text(out / 'issue.md', '\n'.join(issue) + '\n')
     e = html.escape
     cards = ''.join(f'<article class="rule {"kept" if r["id"] in kept else "removed"}" data-kept="{str(r["id"] in kept).lower()}">'
@@ -148,13 +178,21 @@ article,details{margin:14px 0}.kept{border-left:4px solid #82e5bc}.removed{opaci
 <main><div class="eyebrow">RULEBISECT / EVIDENCE FIRST</div><h1>哪组指令改变了任务结果？</h1>'''
     if report.get('kind') == 'comparison':
         document = document.replace('哪组指令改变了任务结果？', '这次指令修改改善了任务吗？')
+    if report.get('kind') == 'checks':
+        document = document.replace('哪组指令改变了任务结果？', '这些验证器能正常运行吗？')
     document += f'<p class="notice">{e(label)} · {e(report["message"])}</p><p><strong>下一步：</strong>{e(action)}</p>'
+    if selection_text(report):
+        document += '<p class="notice">' + e(selection_text(report)) + '</p>'
     unit_stat = f'任务 / Cases<strong>{sum(c["verdict"] != "pending" for c in report["cases"])} / {len(report["cases"])}</strong>' if report.get('kind') == 'comparison' else f'保留指令 / Units<strong>{len(kept)} / {len(rules)}</strong>'
+    if report.get('kind') == 'checks':
+        unit_stat = f'验证用例 / Cases<strong>{sum(c["outcome"] != "pending" for c in report["cases"])} / {len(report["cases"])}</strong>'
     document += '<div class="stats"><div class="stat">' + unit_stat + '</div>'
-    document += f'<div class="stat">运行次数 / Executions<strong>{len(report["trials"])} / {report["max_runs"]}</strong></div><div class="stat">已上报 Token / Reported<strong>{token_label}</strong></div></div>'
+    execution_stat = ('Codex 调用 / Model calls<strong>0</strong>' if report.get('kind') in ('check', 'checks') else
+                      f'运行次数 / Executions<strong>{len(report["trials"])} / {report["max_runs"]}</strong>')
+    document += f'<div class="stat">{execution_stat}</div><div class="stat">已上报 Token / Reported<strong>{token_label}</strong></div></div>'
     document += '<div class="stats">' + comparisons + '</div>' + check
     document += '<details><summary>Token 明细 / Usage breakdown</summary><pre>' + e(json.dumps(totals, indent=2)) + '</pre></details>'
-    document += f'<p>Runner: {e(report["runner"])} · Model: {e(report.get("requested_model") or "simulation")}. '
+    document += f'<p>Runner: {e(report["runner"])} · Model: {e(model_label)}. '
     claim = '结果是有限重复运行的观察，不证明因果关系，也不保证未测试任务正常。' if report.get('kind') == 'comparison' else '结果是有限重复运行的观察，不代表因果关系、统计置信度或全局最小。'
     document += claim + 'Token 包括输入与输出，缓存输入已包含在输入中；未上报用量不计入，不能推算费用。</p>'
     document += '<details><summary>任务与实验设置 / Experiment settings</summary><pre>' + e(json.dumps(experiment, ensure_ascii=False, indent=2)) + '</pre></details>'
@@ -162,13 +200,15 @@ article,details{margin:14px 0}.kept{border-left:4px solid #82e5bc}.removed{opaci
     document += '<p><a href="report.json">JSON</a> · <a href="report.md">Markdown</a> · <a href="issue.md">精简 Issue 草稿</a>' + patch_link + '</p>'
     if report.get('kind') == 'comparison':
         document += comparison_html(report)
+    elif report.get('kind') == 'checks':
+        document += checks_html(report)
     else:
         document += '<h2>指令地图 / Instruction map</h2>'
-    document += '<div><button id="all" aria-pressed="true">全部</button><button id="kept" aria-pressed="false">只看保留</button><input id="search" type="search" placeholder="搜索指令 / Search" aria-label="搜索指令"></div>' + (cards if report.get('kind') != 'comparison' else '')
-    if report.get('kind') != 'comparison':
+    document += '<div><button id="all" aria-pressed="true">全部</button><button id="kept" aria-pressed="false">只看保留</button><input id="search" type="search" placeholder="搜索指令 / Search" aria-label="搜索指令"></div>' + (cards if report.get('kind') not in ('comparison', 'checks') else '')
+    if report.get('kind') not in ('comparison', 'checks'):
         document += '<h2>实验对照 / Evaluation ledger</h2><div class="table"><table><tr><th>Phase</th><th>Units</th><th>Pass</th><th>Fail</th><th>Error</th><th>Outcome</th></tr>' + rows + '</table></div>'
     document += '<h2>逐次日志与代码差异 / Run evidence</h2>' + ''.join(trials)
-    if report.get('kind') == 'comparison':
+    if report.get('kind') in ('comparison', 'checks'):
         document += '<style>#all,#kept,#search{display:none}</style>'
     document += '''</main><script>let onlyKept=false;function filter(){const q=document.getElementById('search').value.toLowerCase();document.querySelectorAll('.rule').forEach(el=>{el.hidden=(onlyKept&&el.dataset.kept!=='true')||!el.textContent.toLowerCase().includes(q)});document.getElementById('all').setAttribute('aria-pressed',String(!onlyKept));document.getElementById('kept').setAttribute('aria-pressed',String(onlyKept))}document.getElementById('all').onclick=()=>{onlyKept=false;filter()};document.getElementById('kept').onclick=()=>{onlyKept=true;filter()};document.getElementById('search').oninput=filter;</script></html>'''
     atomic_text(out / 'report.html', document)

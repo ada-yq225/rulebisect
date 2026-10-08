@@ -1,3 +1,16 @@
+# Validation — v0.5.0
+
+Executed on macOS, 2026-10-08. Constructed fixtures; no real-world defect claim.
+
+- All 98 automated checks passed on Python 3.11.15. New coverage includes manifest suggestions, cancellation without writes, case schema/collision checks, atomic configuration rollback, protected untracked verifiers, independent suite-check workspaces, initial behavior failures and infrastructure errors.
+- A focused review reproduced a subset-selection bug: omitted untracked verifiers disappeared from the snapshot. Fixed selection to retain the full suite's oracle/protected-file union; a regression test confirms full and selected checks use identical snapshot hashes.
+- Built the wheel with the locally available setuptools runtime, installed it in an isolated virtual environment, and ran the installed CLI outside the source checkout. Guided init, add/list/remove case, whole-suite checks, draft creation and a selected comparison plan completed successfully.
+- The installed workflow checked two initial behavior failures (both exit 1) without treating them as infrastructure failures. A selected comparison planned six calls and explicitly omitted the other task, with zero model calls.
+- Installed regression demo completed eight deterministic simulator executions and caught the constructed improvement plus regression.
+- No actual Codex/model calls were made for this release. These checks exercise configuration, isolation, evidence and workflow rather than model effectiveness.
+- Automated browser inspection was blocked by the browser security policy. No alternate browser route was used. Report content and links were checked by automated tests; visual/browser-interaction verification was not completed in this release.
+- CI covers Linux/macOS/Windows × Python 3.11/3.13, all three demos, packaged installation and the installed guided workflow. Current revision results are recorded in GitHub Actions.
+
 # Validation — v0.4.2
 
 Executed on macOS, 2026-10-07.

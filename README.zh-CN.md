@@ -1,6 +1,6 @@
 # RuleBisect
 
-**Codex 任务反复失败时，用实验找出值得检查的指令组合。**
+**调试 Codex 规则，验证修复有没有破坏其他任务。**
 
 永久免费、MIT 开源、只支持 Codex、无服务端和遥测。真实运行使用**你本机 Codex CLI 的登录身份和账户额度**；项目免费，模型调用仍可能产生费用。当前为实验性工具。
 
@@ -21,7 +21,15 @@ rulebisect demo --scenario fix --open
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。安装并登录 Codex CLI，在源码目录安装：
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.5.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.5.0)提供安装包，项目暂未上架 PyPI。
+
+创建并激活虚拟环境后，可以直接安装发布版：
+
+```sh
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.5.0/rulebisect-0.5.0-py3-none-any.whl
+```
+
+或者从源码安装：
 
 ```sh
 git clone https://github.com/ada-yq225/rulebisect.git
@@ -33,7 +41,18 @@ python3 -m venv .venv
 python -m pip install .
 ```
 
-进入你要调查的 Git 仓库：
+进入你要调查的 Git 仓库，推荐先使用引导式配置：
+
+```sh
+rulebisect init --wizard
+rulebisect doctor --offline
+rulebisect check --all --open
+rulebisect run --model 你可用的Codex模型ID --open
+```
+
+向导只问四项：具体任务、独立检查命令、可选的环境准备命令、可选的模型。它根据项目清单提示可能的测试命令，需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的指令与保护文件。
+
+也可以继续使用直接配置：
 
 ```sh
 rulebisect init \
@@ -71,15 +90,39 @@ rulebisect doctor --config experiment.json --json
 
 `--offline` 跳过 Codex 安装和登录检查，适合离线准备配置。两种模式都不调用模型、不执行 setup 或验证器，也不生成实验文件。输入检查通过后，用 `check` 实际检查依赖与验证命令。没有保存模型只提示，可在正式运行时用 `--model` 指定。
 
+## 把已有成功任务存成回归用例
+
+```sh
+rulebisect case add existing-feature \
+  --task "实现已有功能的契约，保持兼容行为" \
+  --check "python -m unittest tests.test_existing_feature"
+rulebisect case list
+rulebisect check --all --open
+```
+
+原任务会保留在套件中。新增用例可以用检查命令，也可以指定 `--oracle 现有验证器.py`；保存命令时不会执行。配置原子写入，重复 ID 会拒绝；`case remove ID` 只移除条目，保留验证器文件，且不能删除最后一个用例。
+
+`check --all` 在各自独立的初始快照中执行每个 setup 和验证器，汇总成报告，不调用 Codex。退出码 0 表示全部验证器返回 0 或 1，**不等于所有行为都通过**：初始代码尚未实现时，行为失败可以符合预期。环境错误或中断返回 2。部分测试框架也会用 1 表示导入错误，请检查断言和日志。这是在检查本地验证环境，不能证明 Codex 沙箱中的命令可用。
+
+只想先检查少量任务：
+
+```sh
+rulebisect compare --proposed ../proposed-rules --cases existing-feature --plan
+rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
+```
+
+报告会明确列出未检查的用例；局部通过不能代表它们通过。应用共享规则前，请再跑完整套件。详细流程见[中英文快速上手](docs/QUICKSTART.md)。
+
 ## 常用功能
 
 | 命令 / 选项 | 用途 | 调用模型 |
 |---|---|---|
 | `doctor` | 检查 Python、Git、Codex 版本、登录和配置 | 否 |
-| `init` | 自动生成配置和可信验证器包装脚本 | 否 |
+| `init --wizard` / `init` | 自动生成配置和可信验证器包装脚本 | 否 |
 | `inspect` | 阅读拆分后的指令及源文件行号 | 否 |
 | `plan` | 检查配置、快照和运行预算 | 否 |
-| `check` | 检查验证命令是否可执行 | 否 |
+| `check` / `check --all` | 检查单个或全部验证器环境 | 否 |
+| `case add/list/remove` | 无需编辑 JSON 管理回归用例 | 否 |
 | `run` | 重复运行、删减指令、重新确认 | 是 |
 | `resume --from 旧报告目录` | 复用匹配快照的稳定搜索结果，重新运行基线与最终确认 | 是 |
 | `draft --out 目录` | 复制指令供修改，保持原仓库规则作为基线 | 否 |
