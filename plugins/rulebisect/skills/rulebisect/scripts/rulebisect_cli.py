@@ -6,6 +6,27 @@ import os
 import sys
 
 
+def _windows_argument(value: str) -> str:
+    """Quote one argv value for Windows CRT without importing bootstrap helpers."""
+    result = ['"']
+    backslashes = 0
+    for character in value:
+        if character == '\\':
+            backslashes += 1
+            continue
+        if character == '"':
+            result.append('\\' * (2 * backslashes + 1))
+        else:
+            result.append('\\' * backslashes)
+        result.append(character)
+        backslashes = 0
+    # Backslashes preceding the closing quote must also be escaped. Always
+    # quoting preserves empty values, spaces, quotes and terminal backslashes.
+    result.append('\\' * (2 * backslashes))
+    result.append('"')
+    return ''.join(result)
+
+
 if __name__ == '__main__' and not sys.flags.isolated:
     if sys.version_info < (3, 11):
         print('RuleBisect requires Python 3.11 or newer.', file=sys.stderr)
@@ -13,7 +34,14 @@ if __name__ == '__main__' and not sys.flags.isolated:
     # Ignore PYTHONPATH, the current directory and user site packages before
     # importing any engine modules. Preserve the user's arguments and cwd.
     try:
-        os.execv(sys.executable, [sys.executable, '-I', os.path.abspath(__file__), *sys.argv[1:]])
+        arguments = [sys.executable, '-I', os.path.abspath(__file__), *sys.argv[1:]]
+        if os.name == 'nt':
+            # Windows execv can detach the child and loses CRT argument quoting.
+            # Wait explicitly and return the isolated child's actual exit code.
+            status = os.spawnv(os.P_WAIT, sys.executable,
+                               [_windows_argument(value) for value in arguments])
+            raise SystemExit(status)
+        os.execv(sys.executable, arguments)
     except OSError as error:
         print(f'Cannot start isolated RuleBisect Python: {error}', file=sys.stderr)
         raise SystemExit(2)

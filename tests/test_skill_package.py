@@ -266,6 +266,29 @@ class SkillPackageTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertEqual(result.stdout.strip(), self.version())
 
+    def test_launcher_preserves_quoted_task_backslashes_and_empty_arguments(self):
+        outside = self.extract(self.archive())
+        launcher = outside / builder.LAUNCHER
+        repo = outside / 'repository with spaces'
+        repo.mkdir()
+        (repo / 'AGENTS.md').write_text('Keep task text unchanged.\n', encoding='utf-8')
+        subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+        subprocess.run(['git', 'add', '.'], cwd=repo, check=True)
+        criteria = outside / 'checks with spaces.json'
+        criteria.write_text('[{"type":"file_exists","path":"output.txt"}]', encoding='utf-8')
+        task = r'Keep "quoted" / "" / \"escaped quote\" / \\server\share\a b\\; end with ' + '\\'
+        result = self.launch(launcher, 'init', '--repo', repo, '--task', task,
+                             '--assertions', criteria, cwd=outside)
+        self.assert_ok(result)
+        config = json.loads((repo / '.rulebisect.json').read_text(encoding='utf-8'))
+        self.assertEqual(config['task'], task, 'Actual child argv must preserve the exact task text')
+        # An explicit empty file argument becomes Path('.'), which cannot be
+        # read as a file. Dropping that argument would discover AGENTS.md and
+        # incorrectly make inspect succeed instead.
+        empty = self.launch(launcher, 'inspect', '--repo', repo, '', '--json', cwd=outside)
+        self.assertEqual(empty.returncode, 2, empty.stdout + empty.stderr)
+        self.assertNotIn('Traceback', empty.stderr)
+
     def test_extracted_bundle_runs_regression_fix_and_assertion_check_without_codex(self):
         outside = self.extract(self.archive())
         launcher = outside / builder.LAUNCHER
