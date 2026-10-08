@@ -8,6 +8,32 @@ Provide a task and the result you expect: a file, text, JSON value, or test comm
 
 MIT licensed, permanently free, local-first, no telemetry or hosted service. Codex only. Alpha software. **Actual runs use your installed Codex CLI, authentication and account quota or billing.** No model calls are made by setup, planning or verifier checks.
 
+## Watch the workflow
+
+A broad rule change fixes one task and breaks another. Scope the proposal, check both contracts, then export the outcome counts.
+
+![Catch a regression, validate a scoped proposal, and share aggregate outcomes](docs/media/regression.gif)
+
+Edited illustrations based on **constructed, deterministic simulations; zero model calls**. The two comparison demos each use eight simulation executions. Passing these cases is finite evidence. [Static image](docs/media/regression.png) · [Reproduce the animations](docs/MEDIA.md).
+
+<details>
+<summary>First setup: choose a JSON result without writing Python</summary>
+
+![Guided JSON acceptance checks, frozen criteria, initial verification and case creation](docs/media/onboarding.gif)
+
+The initial check reports missing output as a behavior failure. Setup and verification make no model calls. [Static image](docs/media/onboarding.png).
+
+</details>
+
+<details>
+<summary>Failure reduction: five instruction units become a two-unit reproducer</summary>
+
+![Repeated controls, failure-preserving reduction and fresh single-removal confirmation](docs/media/reduction.gif)
+
+48 **simulation** executions reduce five units to two. The candidate is a failing reproducer; prepare a proposed fix with `draft`, then validate it with `compare`. [Static image](docs/media/reduction.png).
+
+</details>
+
 ## See what it does — no Codex account needed
 
 Install using Python 3.11+ and Git, then try:

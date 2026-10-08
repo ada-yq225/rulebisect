@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added three compact, reproducible workflow GIFs and static alternatives to the English and Chinese READMEs: no-code setup, failure reduction, and regression/fix/sharing.
+- Animations use verified model-free CLI fixtures, display simulation labels, and include generator scripts, checked facts and automated GIF decoding/size validation.
+
 ## 0.6.0 — Define the result, debug the rules, share the outcome
 
 - Define deterministic acceptance checks in JSON without writing Python: file existence/absence, text inclusion/exclusion, regex search and exact JSON Pointer values. Strict schema validation catches mistakes before configuration is written.

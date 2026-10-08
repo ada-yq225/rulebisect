@@ -1,0 +1,38 @@
+{
+  "format": "rulebisect-media-facts-v1",
+  "version": "0.6.0",
+  "presentation": "Edited workflow illustrations; not screen recordings.",
+  "actual_codex_calls": 0,
+  "onboarding": {
+    "initial_cases": 1,
+    "initial_outcome": "fail",
+    "saved_cases": 2,
+    "runner": "verifier_only"
+  },
+  "reduction": {
+    "units": 5,
+    "candidate": [
+      1,
+      3
+    ],
+    "repeats": 3,
+    "executions": 48,
+    "status": "observed_1_minimal"
+  },
+  "regression": {
+    "executions": 8,
+    "repeats": 2,
+    "verdicts": [
+      "improvement",
+      "regression"
+    ]
+  },
+  "fix": {
+    "executions": 8,
+    "repeats": 2,
+    "verdicts": [
+      "improvement",
+      "unchanged_pass"
+    ]
+  }
+}

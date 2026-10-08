@@ -4,6 +4,32 @@
 
 永久免费、MIT 开源、只支持 Codex、无服务端和遥测。真实运行使用**你本机 Codex CLI 的登录身份和账户额度**；项目免费，模型调用仍可能产生费用。当前为实验性工具。
 
+## 看动图了解流程
+
+一条宽泛规则修好了当前任务，却破坏了另一个契约。缩小修改范围，重新检查两种行为，再导出结果摘要：
+
+![发现回归、验证限定范围的修改、分享结果计数](docs/media/regression.gif)
+
+动图根据**构造的确定性模拟结果**制作并调整阅读节奏，模型调用为零；两次对照演示各执行 8 次模拟。通过只支持这些案例的有限观察。[静态图片](docs/media/regression.png) · [重新生成动图](docs/MEDIA.md)。
+
+<details>
+<summary>首次上手：选择 JSON 条件，无需写 Python</summary>
+
+![引导式 JSON 验收、固化条件、初始检查和保存案例](docs/media/onboarding.gif)
+
+初始输出不存在时，检查会明确显示行为失败；初始化和验证不调用模型。[静态图片](docs/media/onboarding.png)。
+
+</details>
+
+<details>
+<summary>失败定位：5 条指令缩减为 2 条失败复现</summary>
+
+![重复对照、保留失败的缩减、重新执行逐条移除确认](docs/media/reduction.gif)
+
+48 次**模拟执行**把 5 条指令缩减为 2 条。候选保留了失败，准备修复用 `draft`，验证修改用 `compare`。[静态图片](docs/media/reduction.png)。
+
+</details>
+
 ## 先看效果：无需 Codex 账户
 
 按下面步骤安装后，直接运行：

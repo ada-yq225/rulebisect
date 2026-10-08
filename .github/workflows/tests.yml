@@ -1,6 +1,16 @@
 name: tests
 on: [push, pull_request]
 jobs:
+  media:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install Pillow
+      - name: Decode every workflow GIF and check publishing limits
+        run: python scripts/check_media.py --size 1000x620 docs/media/onboarding.gif docs/media/reduction.gif docs/media/regression.gif
   test:
     strategy:
       fail-fast: false
