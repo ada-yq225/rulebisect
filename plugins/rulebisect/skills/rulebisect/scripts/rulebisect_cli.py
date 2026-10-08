@@ -27,14 +27,16 @@ def _windows_argument(value: str) -> str:
     return ''.join(result)
 
 
-if __name__ == '__main__' and not sys.flags.isolated:
+if __name__ == '__main__' and (not sys.flags.isolated or not sys.flags.utf8_mode):
     if sys.version_info < (3, 11):
         print('RuleBisect requires Python 3.11 or newer.', file=sys.stderr)
         raise SystemExit(2)
     # Ignore PYTHONPATH, the current directory and user site packages before
-    # importing any engine modules. Preserve the user's arguments and cwd.
+    # importing any engine modules. Use UTF-8 for bilingual redirected output
+    # even when Windows or the parent environment selects an ASCII code page.
+    # Preserve the user's arguments and cwd.
     try:
-        arguments = [sys.executable, '-I', os.path.abspath(__file__), *sys.argv[1:]]
+        arguments = [sys.executable, '-I', '-X', 'utf8', os.path.abspath(__file__), *sys.argv[1:]]
         if os.name == 'nt':
             # Windows execv can detach the child and loses CRT argument quoting.
             # Wait explicitly and return the isolated child's actual exit code.

@@ -59,7 +59,7 @@ class SkillPackageTests(unittest.TestCase):
     def launch(self, launcher, *args, cwd=None, env=None):
         return subprocess.run([sys.executable, str(launcher), *map(str, args)],
                               cwd=cwd or self.root, env=env, capture_output=True,
-                              text=True, timeout=60)
+                              encoding='utf-8', timeout=60)
 
     def assert_ok(self, result):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -288,6 +288,37 @@ class SkillPackageTests(unittest.TestCase):
         empty = self.launch(launcher, 'inspect', '--repo', repo, '', '--json', cwd=outside)
         self.assertEqual(empty.returncode, 2, empty.stdout + empty.stderr)
         self.assertNotIn('Traceback', empty.stderr)
+
+    def test_doctor_outputs_real_utf8_from_ascii_parent_and_preisolated_python(self):
+        outside = self.extract(self.archive())
+        launcher = outside / builder.LAUNCHER
+        repo = outside / 'utf8 repository'
+        repo.mkdir()
+        (repo / 'AGENTS.md').write_text('Produce an output file.\n', encoding='utf-8')
+        subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+        subprocess.run(['git', 'add', '.'], cwd=repo, check=True)
+        criteria = outside / 'utf8 checks.json'
+        criteria.write_text('[{"type":"file_exists","path":"output.txt"}]', encoding='utf-8')
+        self.assert_ok(self.launch(launcher, 'init', '--repo', repo, '--task', 'Produce an output.',
+                                  '--assertions', criteria, cwd=outside))
+        env = dict(os.environ, PYTHONIOENCODING='ascii:strict', PYTHONUTF8='0',
+                   PYTHONCOERCECLOCALE='0')
+        for flags in ((), ('-I', '-X', 'utf8=0')):
+            with self.subTest(flags=flags):
+                command = [sys.executable, *flags, str(launcher), 'doctor', '--repo', str(repo), '--offline']
+                # Capture actual bytes and decode explicitly: the test process's
+                # locale must not hide or reinterpret a child encoding failure.
+                result = subprocess.run(command, cwd=outside, env=env,
+                                        capture_output=True, timeout=60)
+                stdout, stderr = result.stdout.decode('utf-8'), result.stderr.decode('utf-8')
+                self.assertEqual(result.returncode, 0, stdout + stderr)
+                self.assertIn('No model calls', stdout)
+                self.assertIn('不消耗模型额度，不执行验证器'.encode('utf-8'), result.stdout)
+                self.assertNotIn('Traceback', stderr)
+                structured = subprocess.run([*command, '--json'], cwd=outside, env=env,
+                                            capture_output=True, timeout=60)
+                self.assertEqual(structured.returncode, 0, structured.stderr.decode('utf-8'))
+                self.assertTrue(json.loads(structured.stdout.decode('utf-8'))['ok'])
 
     def test_extracted_bundle_runs_regression_fix_and_assertion_check_without_codex(self):
         outside = self.extract(self.archive())

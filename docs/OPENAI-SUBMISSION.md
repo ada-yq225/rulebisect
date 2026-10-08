@@ -11,9 +11,9 @@ Skill/插件包版本为 **0.1.0**，内置引擎为 **0.7.0**；需要 Python *
 无需 pip 安装。真实实验另需已安装并登录的 Codex CLI，使用你的现有额度或计费。
 
 [Download the Skill/plugin ZIPs and checksums / 下载 ZIP 与校验和](https://github.com/ada-yq225/rulebisect/releases/tag/skill-v0.1.0).
-Local validation: **177 tests passed**, including extracted-package workflows;
+Local validation: **178 tests passed**, including extracted-package workflows;
 this distribution's validation used **zero real model calls**. See [validation limits](../VALIDATION.md).
-本地验证通过 **177 项测试**，包含解压后的独立运行；本次分发验证**零真实模型调用**。
+本地验证通过 **178 项测试**，包含解压后的独立运行；本次分发验证**零真实模型调用**。
 
 ## Choose one installation / 选择一种安装方式
 
