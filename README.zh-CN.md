@@ -1,8 +1,12 @@
 # RuleBisect
 
-**调试 Codex 规则，验证修复有没有破坏其他任务。**
+**定位让 Codex 任务失败的规则，应用修改前先检查有没有回退。**
 
-永久免费、MIT 开源、只支持 Codex、无服务端和遥测。真实运行使用**你本机 Codex CLI 的登录身份和账户额度**；项目免费，模型调用仍可能产生费用。当前为实验性工具。
+给出任务和可执行的结果检查，RuleBisect 会缩小能稳定复现失败的指令组合，跨任务验证修改，并在本地证据工作台中先展示结果与下一步操作。
+
+永久免费 · MIT 开源 · 只支持 Codex · 本地运行 · 无遥测。真实实验使用**你本机 Codex CLI 的登录身份和账户额度**，模型调用仍可能产生费用；配置、规划、验证器检查和确定性演示不调用模型。当前为实验性工具。
+
+[先看演示](#先看效果无需-codex-账户) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
 
 ## 看动图了解流程
 
@@ -47,12 +51,12 @@ rulebisect demo --scenario fix --open
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.6.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.6.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.7.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.7.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.6.0/rulebisect-0.6.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.7.0/rulebisect-0.7.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -198,22 +202,29 @@ rulebisect resume --from /旧证据目录 --max-runs 100
 
 `max-runs` 是**包含旧运行的总次数上限**。续跑生成新的证据目录，保留旧日志；只复用已完成且稳定的搜索组，基线和最终确认会重新执行。快照或关键设置变化时拒绝复用。其他外部环境变化仍可能影响结果，因此复用不能证明整个环境完全一致。
 
-## 报告里有什么
+## 读懂报告与分享结果
 
-- 中文与英文标注的状态、下一步操作、完整指令与空指令的对照计数。
-- 可搜索的指令地图，可只看候选保留的片段。
-- 已上报 Token 用量、每次 Agent / 验证器日志和新增、修改和删除文件的代码差异。
-- HTML、JSON、Markdown、精简 Issue 草稿、候选指令文件与差异补丁。
+离线报告优先展示**结果与下一步操作**，来源标记区分 Codex 运行、确定性模拟和仅验证器检查。从任务结果直接跳到对应证据，联合使用结果、阶段、任务筛选与搜索，再一键重置。新增与删除的代码行以不同颜色标记；指令、代码、日志保留原文。界面支持明暗主题与 English/中文切换。
 
-补丁只是调查建议，**不会自动应用**。先审查，再在其他任务上验证。代码差异覆盖已快照的非指令文件和未被 Git 忽略的新文件；准备依赖时产生的文件不算新文件证据，较大文件和二进制文件仅记录名称。精简 Issue 草稿默认不包含任务内容、指令正文或原始日志，分享前仍需检查版本等信息。
+升级后，可直接更新旧证据的报告界面，无需重新调用模型：
 
-只想分享结果计数，可以运行：
+```sh
+rulebisect report ../experiment-evidence --open
+# 或打开当前仓库默认历史中的最新报告：
+rulebisect report --latest --open
+```
+
+样式和交互脚本包含在 HTML 内，可以离线打开。只提供确实存在的本地证据链接，拒绝符号链接或不安全 URL 分隔符路径。关闭 JavaScript 后，结果、表格、指令和逐次证据仍可阅读。[报告导航与状态说明](docs/REPORTS.md)。
+
+**完整报告属于私有证据**：任务、设置、文件名、代码差异和日志可能包含仓库数据。JSON、Markdown、精简 Issue 草稿、候选文件和审查用补丁仍保存在证据目录中；不会自动应用规则或发布 Issue。只想分享结果计数时运行：
 
 ```sh
 rulebisect share ../experiment-evidence --out ../summary.html
 ```
 
-生成独立、可离线打开的 HTML，只按固定白名单导出状态、来源、计数和已上报 Token；不包含任务、指令、代码、文件名、用例 ID、模型、命令、日志、时间戳或仓库路径。输出必须是证据目录之外的新文件，不会上传。汇总数字也请先审查；摘要不是经过独立认证的证据，也不能代替完整复现材料。[分享说明](docs/SHARING.md)。
+摘要采用相同视觉风格，**没有可执行 JavaScript 或链接**。固定白名单只保留状态、来源、计数与已上报 Token；不含任务、指令、代码、文件名、用例 ID、模型、命令、日志、时间戳或仓库路径。输出必须是证据目录之外的新文件，不会上传。汇总数字也请先审查。[分享说明](docs/SHARING.md)。
+
+代码差异覆盖已快照的非指令文件和未被 Git 忽略的新文件；准备依赖时产生的文件不算新文件证据，较大文件和二进制文件仅记录名称。**缩减候选是更小的失败复现，不是已经验证的修复。** 对照实验通过也只覆盖本次选定任务与重复次数；未检查的用例会明确列出。
 
 ## 修改规则后，先验证有没有回退
 
@@ -291,7 +302,7 @@ rulebisect init --task "明确的任务" --oracle verify_behavior.py --model 模
 python3.11 -m unittest discover -s tests -v
 ```
 
-当前已测试实际 Python 函数修改、确定性缩减、断点续跑、快照变化拒绝、Token 停止和无模型配置流程。准确结果见 [VALIDATION.md](VALIDATION.md)。v0.2 已通过 Linux/macOS/Windows 的 Python 3.11/3.13 六组 GitHub CI；新版验证记录见上述文档。
+当前已测试实际 Python 函数修改、确定性缩减、断点续跑、快照变化拒绝、Token 停止和无模型配置流程。准确结果见 [VALIDATION.md](VALIDATION.md)。CI 覆盖 Linux/macOS/Windows 的 Python 3.11/3.13 六种组合；实际执行结果以上述验证记录为准。
 
 最有价值的贡献是可脱敏、可独立验证的真实失败案例。附模型和工具版本、任务、指令、验证条件与重复运行次数。
 

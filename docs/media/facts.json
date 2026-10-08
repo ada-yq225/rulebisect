@@ -1,6 +1,6 @@
 {
   "format": "rulebisect-media-facts-v1",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "presentation": "Edited workflow illustrations; not screen recordings.",
   "actual_codex_calls": 0,
   "onboarding": {

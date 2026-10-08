@@ -1,9 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — An evidence workspace you can navigate
 
+- Rebuilt local reports around the outcome and next action, with explicit Codex/simulation/verifier-only source badges and section navigation.
+- Added light/dark themes and English/中文 interface controls. Original tasks, instructions, code and logs keep their original text; the report remains readable without JavaScript.
+- Jump from task results to run evidence. Combine text search with outcome, phase and task filters; reset filters and see the live count of matching runs.
+- Added colored code-diff lines, clearer evidence cards, accessible named controls, table captions and scoped headers. Styles, icons and scripts remain inline for offline use.
+- Link only to existing local evidence artifacts. Reject symlink components, directory traversal, URL schemes, backslashes and unsafe URL delimiters before reading or linking saved evidence.
+- Restyled aggregate sharing to match the reports while preserving the fixed metadata allowlist, no executable JavaScript and no links.
+- Existing evidence can be refreshed with `rulebisect report PATH --open` without model calls. Added a bilingual report-navigation guide and privacy distinctions between full reports and aggregate summaries.
 - Added three compact, reproducible workflow GIFs and static alternatives to the English and Chinese READMEs: no-code setup, failure reduction, and regression/fix/sharing.
-- Animations use verified model-free CLI fixtures, display simulation labels, and include generator scripts, checked facts and automated GIF decoding/size validation.
+- Animations use verified model-free CLI fixtures, display simulation labels, and include generator scripts, checked facts and automated GIF decoding/size validation. The light presentation matches the new report UI; these are edited constructed examples, not real account screen recordings.
+- UI validation uses static HTML/DOM checks. Automated browser visual QA was not completed because localhost access was rejected by tool policy; this update does not claim fresh real-model validation.
 
 ## 0.6.0 — Define the result, debug the rules, share the outcome
 

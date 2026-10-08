@@ -18,6 +18,16 @@ rulebisect demo --scenario fix --open
 
 These tests and demos do not call a model. CI also tests packaged installation on Linux, macOS and Windows, Python 3.11 and 3.13. No runtime dependencies are required beyond the standard library; the build uses setuptools.
 
+For report controls, Node 22 can run the optional dependency-free mock-DOM check:
+
+```sh
+rulebisect demo --out ../reduction-evidence
+rulebisect demo --scenario regression --out ../regression-evidence
+node scripts/check_report_controls.mjs ../reduction-evidence/report.html ../regression-evidence/report.html
+```
+
+It extracts real HTML nodes and runs the fixed current report script against a mock DOM. Set `PYTHON` if `python3` is unavailable. Regenerate old reports before checking them. This validates control logic, not CSS/layout or browser accessibility; inspect desktop/mobile and light/dark views in a browser when your environment permits. [Report guide](docs/REPORTS.md) and [media generation](docs/MEDIA.md) describe the offline UI and edited GIF fixtures.
+
 ## Useful contributions
 
 - A small, redacted repository with a failing task and an independent verifier.

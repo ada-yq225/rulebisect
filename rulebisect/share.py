@@ -8,6 +8,8 @@ import re
 import tempfile
 from pathlib import Path
 
+from .ui import styles, svg_icon
+
 # Only finite counts and fixed enums cross this boundary. Never reuse report.message,
 # report paths, case IDs, tasks, or generated HTML from the full evidence report.
 MAX_COUNT = 2**53 - 1
@@ -139,11 +141,14 @@ def _summary(report):
 def _render(summary):
     esc = html.escape
     def display(value):
-        return 'unknown' if value is None else f'{value:,}' if type(value) is int else esc(value)
-    def rows(values):
-        return ''.join(f'<tr><th>{esc(key.replace("_", " "))}</th><td>{display(value)}</td></tr>' for key, value in values.items())
+        return 'unknown / 未知' if value is None else f'{value:,}' if type(value) is int else esc(value)
     def table(title, values):
-        return f'<section><h2>{title}</h2><table>{rows(values)}</table></section>'
+        rows = ''.join(f'<tr><th scope="row">{esc(key.replace("_", " "))}</th><td>{display(value)}</td></tr>' for key, value in values.items())
+        return (f'<section class="section"><div class="section-heading"><h2>{title}</h2></div><div class="panel table-wrap">'
+                f'<table class="comparison-matrix summary-table"><caption class="sr-only">{title}</caption>'
+                '<thead><tr><th scope="col">Measure / 指标</th><th scope="col">Count / 数量</th></tr></thead>' + rows + '</table></div></section>')
+    def metric(label, value, detail):
+        return f'<div class="mini-stat"><div class="metric-label">{label}</div><div class="metric-value">{display(value)}</div><div class="metric-detail">{detail}</div></div>'
     usage = summary['usage']
     sections = table('Observation counts / 观测次数', summary['observations'])
     if 'verdicts' in summary:
@@ -157,18 +162,26 @@ def _render(summary):
     sections += table('Reported token usage / 已报告 Token', usage)
     encoded = json.dumps(summary, sort_keys=True, indent=2).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     status = summary['status']
+    tone = 'danger' if status in ('regressions_observed', 'candidate_failed', 'checks_failed', 'control_failed') else 'success' if status == 'no_regressions_observed' else 'warning' if status in ('observed_1_minimal', 'inconclusive', 'interrupted', 'not_reproduced') else 'neutral'
+    sources = {'simulation': 'Simulation · 0 model calls / 模拟 · 0 次模型调用', 'verifier_only': 'Verifier only · 0 model calls / 仅验证器 · 0 次模型调用', 'codex': 'Codex', 'unknown': 'Unknown source / 来源未知'}
+    stats = metric('Recorded trials / 试验次数', summary['executions'], 'Saved observations / 已保存观测')
+    stats += metric('Omitted cases / 未检查用例', summary['omitted_cases'], 'Outside the tested scope / 不在测试范围')
+    stats += metric('Version / 版本', summary['version'], 'Report tool version / 报告工具版本')
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>RuleBisect public summary</title>
-<style>body{{margin:0;background:#111820;color:#e8edf3;font:16px/1.6 system-ui,sans-serif}}main{{max-width:860px;margin:auto;padding:36px 24px}}h1{{font-size:30px;line-height:1.25}}h2{{font-size:18px}}.tag{{color:#82e5bc}}.note{{color:#b3c0ce}}.stats,.sections{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}section,.stat{{padding:18px;background:#1b2530;border:1px solid #344150;border-radius:12px}}.stat strong{{display:block;font-size:24px}}table{{width:100%;border-collapse:collapse}}th,td{{text-align:left;padding:7px 0;border-bottom:1px solid #344150;font-size:14px;overflow-wrap:anywhere}}td{{text-align:right}}@media(max-width:580px){{.sections,.stats{{grid-template-columns:1fr}}main{{padding:24px 16px}}}} </style></head>
-<body><main><p class="tag">RuleBisect · aggregate-only evidence / 仅含汇总数据</p><h1>Public summary / 公开摘要</h1>
-<p><strong>{esc(status.replace('_', ' '))}</strong></p><p>{STATUS[status]}</p>
-<p class="note">This is a summary of a saved report, not independently authenticated evidence. Finite observations do not prove causation, statistical confidence, or a globally smallest subset.</p>
-<div class="stats"><div class="stat">Recorded trials / 试验次数<strong>{summary['executions']:,}</strong></div><div class="stat">Source / 来源<strong>{esc(summary['source'])}</strong></div><div class="stat">Version / 版本<strong>{esc(summary['version'])}</strong></div><div class="stat">Omitted cases / 未检查用例<strong>{summary['omitted_cases']:,}</strong></div></div>
-<p class="note">Kind: {esc(summary['kind'])} · Repeats: {display(summary['repeats'])} · Execution budget: {display(summary['max_runs'])}</p>
-<div class="sections">{sections}</div>
-<p class="note">Missing or partial usage is unknown, not zero cost. Cached input is included in input tokens; it is not an extra token total. No currency cost is inferred.</p>
-<p class="note">Tasks, instructions, filenames, case identifiers, models, commands, logs, timestamps and repository paths are omitted. Review these aggregate statistics before publishing. Full evidence stays in the original report.</p>
+<meta name="referrer" content="no-referrer"><title>RuleBisect · Public summary</title>
+<style>{styles()}
+.share-sections{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px}}.summary-table td{{text-align:right;font-variant-numeric:tabular-nums}}.summary-table th[scope=row]{{background:transparent;font-size:12px;font-weight:500;white-space:normal}}.summary-table th,.summary-table td{{padding:11px 16px}}@media(max-width:620px){{.share-sections{{display:block}}.summary-table,.summary-table tbody{{display:table;width:100%}}.summary-table thead{{display:table-header-group}}.summary-table tr{{display:table-row}}.summary-table th,.summary-table td{{display:table-cell;border-top:1px solid var(--border)}}}}
+</style></head><body><main class="share-shell" id="main-content">
+<header class="summary-header"><div class="brand"><span class="brand-mark">{svg_icon('mark')}</span>RuleBisect</div><span class="source-pill">{svg_icon('flask')}{sources[summary['source']]}</span></header>
+<div class="page-heading"><div><p class="eyebrow">AGGREGATE-ONLY EVIDENCE / 仅含汇总数据</p><h1>Public summary / 公开摘要</h1><p class="subtitle">A compact view of the recorded outcome / 已记录结果的简洁视图</p></div></div>
+<div class="hero" data-tone="{tone}"><div class="hero-icon">{svg_icon('warning' if tone in ('danger', 'warning') else 'checks')}</div><div class="hero-copy"><h2>{esc(status.replace('_', ' '))}</h2><p>{STATUS[status]}</p><p class="section-note">Summary of a saved report; not independently authenticated evidence. / 来自已保存报告，未经独立认证。</p></div></div>
+<div class="summary-grid">{stats}</div>
+<div class="privacy-banner">{svg_icon('shield')}<p><strong>Counts stay. Private context stays out. / 保留计数，排除私有上下文。</strong><br>Tasks, instructions, filenames, case identifiers, models, commands, logs, timestamps and repository paths are omitted. Full evidence stays in the original report. / 不包含任务、指令、文件名、用例 ID、模型、命令、日志、时间戳和仓库路径；完整证据保留在原报告。</p></div>
+<p class="section-note">Kind: {esc(summary['kind'])} · Repeats: {display(summary['repeats'])} · Execution budget: {display(summary['max_runs'])}</p>
+<div class="share-sections">{sections}</div>
+<div class="notice">{svg_icon('activity')}<p>Missing or partial usage is unknown, not zero cost. Cached input is included in input tokens; no currency cost is inferred. / 缺失或部分用量表示未知，不代表免费；缓存输入包含在输入 Token 中，不能推算货币费用。</p></div>
+<footer class="footer"><span>RuleBisect · Offline summary / 离线摘要</span><span>Finite observations do not prove causation, statistical confidence, or a globally smallest subset. Review aggregates before publishing. / 有限观测不证明因果、统计置信度或全局最小；发布前请检查汇总数据。</span></footer>
 <script type="application/json" id="rulebisect-summary">{encoded}</script></main></body></html>\n'''
 
 

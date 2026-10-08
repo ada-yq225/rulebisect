@@ -27,6 +27,13 @@ jobs:
       - run: python -m rulebisect demo --out demo-evidence
       - run: python -m rulebisect demo --scenario regression --out regression-evidence
       - run: python -m rulebisect demo --scenario fix --out fix-evidence
+      - uses: actions/setup-node@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
+        with:
+          node-version: '22'
+      - name: Check report controls against actual generated HTML with a mock DOM
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.11'
+        run: node scripts/check_report_controls.mjs demo-evidence/report.html regression-evidence/report.html fix-evidence/report.html
       - run: python -m pip wheel --no-deps . --wheel-dir dist
       - run: python -m pip install --no-deps --force-reinstall --no-index --find-links dist rulebisect
       - name: Smoke test the installed wheel outside the source checkout

@@ -4,6 +4,16 @@ The README animations are constructed illustrations of RuleBisect workflows, usi
 
 README 中的动画使用确定性示例绘制，**不会调用 Codex 或模型**。动画按阅读节奏剪辑，并明确标注模拟演示。它们不是实际屏幕录制，不含账号、私人仓库或用户会话数据，也不代表真实模型的性能测量。
 
+The light presentation matches the evidence reports: warm-white surfaces, deep navy
+text, teal navigation, and restrained status colors. White cards, fine borders and
+short step labels keep attention on the commands and observed results. Simulation
+or verifier-only badges stay visible alongside the edited-walkthrough and zero-call
+labels in every frame. Color supplements the written outcome; it does not replace it.
+
+浅色画面与证据报告采用一致的暖白底色、深色正文和青绿强调色，以细边框卡片与简短
+步骤突出命令和结果。每帧都保留模拟或仅验证器标记、剪辑演示说明和零模型调用说明；
+状态同时用文字和颜色表示，颜色不会替代结果含义。
+
 | File / 文件 | Workflow / 工作流 |
 |---|---|
 | `docs/media/onboarding.gif` | Configure a task and deterministic checks, then preflight before model calls / 配置任务与确定性检查，调用模型前先预检 |
@@ -44,11 +54,11 @@ Review the generated static contact sheets first: check every workflow step, com
 
 先检查静态帧总览：确认工作流步骤、命令、模拟标注、换行和最终结果完整可读，没有裁切或误导表述。再播放动画，按 README 的实际显示大小检查阅读时间、转场和结尾停留。静态帧检查不能代替播放节奏检查。
 
-`check_media.py` seeks to and decodes **every frame**, catching frame decoding errors rather than checking only file headers. It requires:
+`check_media.py` seeks to and decodes **every frame**, catching frame decoding errors rather than checking only file headers.
 
 The renderer additionally checks that every optimized GIF frame reconstructs exactly to its intended palette image, including scene changes. This catches compositing/ghosting mistakes introduced by delta-frame compression.
 
-`check_media.py` 会逐帧定位并**解码所有帧**，不仅检查文件头。检查要求如下：
+The checks require / 检查要求如下：
 
 - GIF content with positive, stable canvas dimensions; optional exact `--size` match.
 - More than one frame and indefinite looping (`loop=0`).

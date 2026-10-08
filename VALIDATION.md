@@ -1,3 +1,17 @@
+# Validation — v0.7.0
+
+Executed on macOS, 2026-10-08. This update changes offline evidence presentation, not the experiment algorithm.
+
+- All **163 automated tests passed** on Python 3.11.15, including 13 report UI tests for semantic navigation, named controls, escaped content, task/run links, zero-model checks, omitted cases, missing artifacts and summary privacy.
+- Reproduced and fixed unsafe saved-report artifact links: URL schemes/delimiters, traversal and symlink components are rejected. Optional downloads appear only for existing local regular files; inline diffs cannot follow symlinks outside the report and previews are capped at 256 KiB.
+- Reusable Node mock-DOM checks extract actual nodes, text, options and the fixed script from generated HTML. Reduction (5 units/48 runs), regression (8 runs), fix (8 runs), and single-verifier (0 runs) passed conjunction/search/reset, bilingual counters, theme state, blocked preference storage, initial empty states and repeated task-anchor navigation. These are logic checks with a simulated DOM, not browser interaction or layout validation.
+- Built and installed the wheel into an isolated Python 3.11 environment. From outside the source checkout, the fix demo and both installed guided/assertion workflows completed, including frozen checks and aggregate-only export without private fixture text.
+- Three freshly generated demos produced their expected statuses: observed_1_minimal, regressions_observed and no_regressions_observed. Summary exports and regenerated older verifier evidence preserved recorded outcomes and source/version metadata.
+- Regenerated all three workflow GIFs from checked 0.7.0 model-free fixtures. The generator checks every decoded frame against its intended pixels; all 96 frames and static posters were reviewed. Media validation passed: each GIF is 1000×620, 32 frames, 20.16 seconds per loop and under 183 KB. These are edited illustrations, not report screenshots or actual account recordings.
+- **No actual Codex/model calls were made for v0.7.** Simulations and verifier checks validate the workflow; they do not measure model effectiveness on user repositories.
+- Browser security policy rejected localhost access. No alternate browser or rendering route was used. Actual report CSS/layout, browser accessibility-tree and visual acceptance remain unverified. The GIF illustrations were inspected as locally generated images.
+- CI covers Linux/macOS/Windows × Python 3.11/3.13, the three demos, wheel installation and installed workflows, plus media checks and the Node mock-DOM check on Linux. Revision-specific results are recorded in GitHub Actions.
+
 # Validation — v0.6.0
 
 Executed on macOS, 2026-10-08. Constructed fixtures; no real-world defect or model-performance claim.

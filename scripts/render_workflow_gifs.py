@@ -17,10 +17,12 @@ from PIL import Image, ImageChops, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 WIDTH, HEIGHT, SCALE = 1000, 620, 2
 COLORS = {
-    'bg': '#0b1220', 'panel': '#131f30', 'terminal': '#0b1524',
-    'border': '#2c3d52', 'text': '#edf2f8', 'muted': '#93a8bf',
-    'dim': '#516780', 'mint': '#7be4bc', 'blue': '#83b9ff',
-    'red': '#ff929e', 'amber': '#f1cb86',
+    'bg': '#f8f9f6', 'panel': '#ffffff', 'terminal': '#ffffff',
+    'border': '#dfe6dd', 'text': '#182b3a', 'muted': '#64746b',
+    'dim': '#87948b', 'mint': '#087c68', 'blue': '#245b78',
+    'red': '#b23e4b', 'amber': '#966112', 'white': '#ffffff',
+    'soft': '#e7f4ed', 'soft-blue': '#edf3f6', 'soft-red': '#fff0f1',
+    'soft-amber': '#fff6e5', 'surface-muted': '#f1f4ef', 'shadow': '#edf0e9',
 }
 
 
@@ -124,14 +126,20 @@ class Canvas:
             self.fonts[key] = ImageFont.truetype(self.mono if mono else self.sans, size * SCALE)
         return self.fonts[key]
 
-    def text(self, x, y, value, size=18, color='text', mono=False):
+    def text(self, x, y, value, size=18, color='text', mono=False, bold=False):
         font = self.font(size, mono)
         # Check against the actual rasterized font, including every command line.
         if self.draw.textlength(value, font=font) > (WIDTH - x - 24) * SCALE:
             raise ValueError(f'Text overflows canvas: {value}')
-        self.draw.text((x * SCALE, y * SCALE), value, font=font, fill=COLORS[color])
+        self.draw.text((x * SCALE, y * SCALE), value, font=font, fill=COLORS[color],
+                       stroke_width=1 if bold else 0, stroke_fill=COLORS[color])
 
-    def box(self, bounds, color='panel', outline='border', radius=12):
+    def box(self, bounds, color='panel', outline='border', radius=12, shadow=False):
+        if shadow:
+            x0, y0, x1, y1 = bounds
+            self.draw.rounded_rectangle((x0 * SCALE, (y0 + 4) * SCALE,
+                                         x1 * SCALE, (y1 + 4) * SCALE),
+                                        radius=radius * SCALE, fill=COLORS['shadow'])
         self.draw.rounded_rectangle(tuple(int(value * SCALE) for value in bounds),
                                     radius=radius * SCALE, fill=COLORS[color],
                                     outline=COLORS[outline] if outline else None, width=SCALE)
@@ -144,25 +152,40 @@ class Canvas:
 
 
 def header(canvas, name, title, caption, labels, stage, progress, simulation):
-    canvas.text(34, 22, 'RULEBISECT', 17, 'mint')
-    canvas.text(174, 22, name, 17, 'muted')
+    # Product chrome stays restrained; the evidence identity is visible on every frame.
+    canvas.box((0, 0, WIDTH, 58), 'panel', outline=None, radius=0)
+    canvas.line((0, 58, WIDTH, 58))
+    canvas.box((34, 15, 62, 43), 'soft', 'border', 8)
+    canvas.line((41, 23, 48, 29, 41, 35), 'mint', 2)
+    canvas.line((49, 35, 56, 35), 'mint', 2)
+    canvas.text(73, 19, 'RuleBisect', 18, bold=True)
+    canvas.text(181, 22, '/', 15, 'dim')
+    canvas.text(199, 21, name, 15, 'muted')
     badge = 'DETERMINISTIC SIMULATION' if simulation else 'VERIFIER-ONLY WORKFLOW'
-    canvas.text(708, 24, badge, 14, 'amber' if simulation else 'blue')
-    canvas.text(34, 62, title, 32)
-    canvas.text(34, 105, caption, 18, 'muted')
+    canvas.box((706, 16, 966, 42), 'soft-amber' if simulation else 'soft-blue', outline=None, radius=6)
+    canvas.text(718, 23, badge, 12, 'amber' if simulation else 'blue', bold=True)
+    canvas.text(34, 79, title, 31, bold=True)
+    canvas.text(34, 121, caption, 17, 'muted')
     for index, label in enumerate(labels):
         x = 34 + index * 239
         active = index == stage
-        canvas.box((x, 149, x + 222, 185), 'panel', 'mint' if active else 'border', 7)
-        canvas.text(x + 12, 157, f'{index + 1:02d}  {label}', 15, 'mint' if active else 'muted')
-    canvas.box((34, 205, 620, 540), 'terminal', radius=12)
-    canvas.text(54, 220, 'terminal / selected output', 13, 'dim')
-    canvas.line((34, 246, 620, 246))
-    canvas.box((642, 205, 966, 540), radius=12)
-    footer = 'Edited walkthrough  |  constructed fixture  |  0 Codex/model calls'
-    canvas.text(34, 574, footer, 14, 'muted')
-    canvas.box((34, 602, 966, 607), 'border', outline=None, radius=2)
-    canvas.box((34, 602, 34 + max(1, 932 * progress), 607), 'mint', outline=None, radius=2)
+        canvas.box((x, 159, x + 222, 194), 'soft' if active else 'bg',
+                   'border' if active else None, 8)
+        canvas.box((x + 10, 166, x + 31, 187), 'mint' if active else 'panel',
+                   None if active else 'border', 6)
+        canvas.text(x + 17, 171, str(index + 1), 11, 'white' if active else 'muted', bold=active)
+        canvas.text(x + 41, 168, label, 15, 'mint' if active else 'muted', bold=active)
+    canvas.box((34, 214, 620, 540), 'terminal', radius=14, shadow=True)
+    canvas.text(54, 232, 'COMMANDS & SELECTED OUTPUT', 11, 'muted', bold=True)
+    canvas.box((551, 226, 603, 246), 'surface-muted', outline=None, radius=5)
+    canvas.text(562, 231, 'LOCAL', 10, 'muted')
+    canvas.line((34, 256, 620, 256))
+    canvas.box((642, 214, 966, 540), radius=14, shadow=True)
+    canvas.text(34, 573, 'Edited walkthrough  /  constructed fixture', 13, 'muted')
+    canvas.box((794, 565, 966, 592), 'soft', outline=None, radius=7)
+    canvas.text(806, 573, '0 Codex/model calls', 13, 'mint', bold=True)
+    canvas.box((34, 603, 966, 606), 'border', outline=None, radius=1)
+    canvas.box((34, 603, 34 + max(1, 932 * progress), 606), 'mint', outline=None, radius=1)
 
 
 def terminal(canvas, lines, reveal=1):
@@ -170,44 +193,55 @@ def terminal(canvas, lines, reveal=1):
     for index, item in enumerate(lines[:count]):
         text, color = item if isinstance(item, tuple) else (item, 'text')
         # Terminal content has a stricter boundary than the full canvas.
-        if canvas.draw.textlength(text, font=canvas.font(20, True)) > 546 * SCALE:
+        if canvas.draw.textlength(text, font=canvas.font(19, True)) > 546 * SCALE:
             raise ValueError(f'Terminal line too long: {text}')
-        canvas.text(54, 262 + index * 31, text, 20, color, mono=True)
+        y = 279 + index * 33
+        if text.startswith('$'):
+            canvas.box((48, y - 4, 606, y + 27), 'soft-blue', outline=None, radius=6)
+        canvas.text(54, y, text, 19, color, mono=True)
 
 
 def side_text(canvas, kicker, title, lines, color='mint'):
-    canvas.text(662, 225, kicker.upper(), 13, 'muted')
-    canvas.text(662, 258, title, 23, color)
+    canvas.text(662, 233, kicker.upper(), 11, 'muted', bold=True)
+    canvas.text(662, 270, title, 23, color, bold=True)
+    canvas.line((662, 309, 946, 309))
     for index, line in enumerate(lines):
-        canvas.text(662, 307 + index * 29, line, 17, 'muted')
+        canvas.text(662, 329 + index * 29, line, 17, 'muted')
 
 
 def rule_cards(canvas, retained=False):
-    canvas.text(662, 224, 'SELECTED INSTRUCTION UNITS', 13, 'muted')
+    canvas.text(662, 233, 'SELECTED INSTRUCTION UNITS', 11, 'muted', bold=True)
     rows = ('UTF-8 output', 'Select legacy format', 'Concise diagnostics',
             'Enable compatibility', 'Descriptive names')
     for index, value in enumerate(rows):
-        y = 258 + index * 43
+        y = 271 + index * 40
         active = not retained or index in (1, 3)
         color = 'red' if retained and active else 'muted' if active else 'dim'
-        canvas.box((660, y, 947, y + 34), 'terminal', color if retained and active else 'border', 6)
-        canvas.text(672, y + 7, f'{index}  {value}', 16, color)
-    canvas.text(662, 491, '2 units retain the failure' if retained else '5 paragraph units', 16, 'red' if retained else 'blue')
+        canvas.box((660, y, 947, y + 33), 'soft-red' if retained and active else 'surface-muted',
+                   'border' if active else None, 6)
+        canvas.text(673, y + 9, str(index), 12, color, mono=True)
+        canvas.text(699, y + 7, value, 15, color, bold=retained and active)
+    canvas.line((662, 479, 946, 479))
+    canvas.text(662, 494, '2 units retain the failure' if retained else '5 paragraph units',
+                16, 'red' if retained else 'blue', bold=True)
 
 
 def comparison_cards(canvas, fixed=False):
-    canvas.text(662, 224, 'PASS COUNTS / TWO REPEATS', 13, 'muted')
+    canvas.text(662, 233, 'PASS COUNTS / TWO REPEATS', 11, 'muted', bold=True)
     for index, (name, before, after, verdict, color) in enumerate((
         ('Modern labels', '0/2', '2/2', 'improvement', 'mint'),
         ('Legacy labels', '2/2', '2/2' if fixed else '0/2',
          'unchanged pass' if fixed else 'regression', 'mint' if fixed else 'red'),
     )):
-        y = 260 + index * 111
-        canvas.box((660, y, 947, y + 94), 'terminal', color, 8)
-        canvas.text(676, y + 11, name, 18)
-        canvas.text(676, y + 39, f'{before}  ->  {after}', 23, color, mono=True)
-        canvas.text(676, y + 72, verdict, 13, color)
-    canvas.text(662, 497, '8 simulation executions', 16, 'muted')
+        y = 273 + index * 103
+        canvas.box((660, y, 947, y + 90), 'soft-red' if color == 'red' else 'soft', 'border', 9)
+        canvas.text(676, y + 10, name, 16, bold=True)
+        canvas.text(676, y + 36, before, 24, 'mint' if before == '2/2' else 'red', mono=True)
+        canvas.text(751, y + 43, 'to', 13, 'muted')
+        canvas.text(799, y + 36, after, 24, color, mono=True)
+        canvas.text(676, y + 69, f'Original -> proposed  /  {verdict}', 11, color)
+    canvas.line((662, 479, 946, 479))
+    canvas.text(662, 495, '8 simulation executions', 15, 'muted')
 
 
 def scenes():

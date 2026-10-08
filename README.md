@@ -1,12 +1,12 @@
 # RuleBisect
 
-[中文说明](README.zh-CN.md)
+**Find a failing Codex rule. Check the fix before you apply it.**
 
-**Debug Codex rules. Keep the fix from breaking another task.**
+Give RuleBisect a task and an executable result check. It shrinks reproducible instruction failures, tests proposed changes across tasks, and opens a local evidence workspace with the outcome and next step first.
 
-Provide a task and the result you expect: a file, text, JSON value, or test command. RuleBisect runs local Codex in fresh repository copies, shrinks failing instruction sets, and checks your proposed fix against other tasks. It leaves inspectable evidence and reports uncertainty instead of inventing a conflict.
+Permanently free · MIT licensed · Codex only · Local-first · No telemetry. Alpha software. **Real experiments use your installed Codex CLI, login and account quota or billing.** Setup, planning, verifier checks and deterministic demos make no model calls.
 
-MIT licensed, permanently free, local-first, no telemetry or hosted service. Codex only. Alpha software. **Actual runs use your installed Codex CLI, authentication and account quota or billing.** No model calls are made by setup, planning or verifier checks.
+[Try a demo](#see-what-it-does--no-codex-account-needed) · [Start with your repository](docs/QUICKSTART.md) · [Read the evidence](docs/REPORTS.md) · [中文说明](README.zh-CN.md)
 
 ## Watch the workflow
 
@@ -49,12 +49,12 @@ The first catches a proposed rule that fixes modern labels but breaks legacy lab
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.6.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.6.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.7.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.7.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.6.0/rulebisect-0.6.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.7.0/rulebisect-0.7.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -296,19 +296,27 @@ The cap includes previous executions. Resume checks tool/CLI version, requested 
 
 ## Read and share evidence
 
-The offline HTML report includes bilingual status/next steps, full-vs-empty control counts, searchable instruction cards, a retained-only filter, reported token usage, and per-run agent/verifier logs. Source changes survive workspace cleanup as `changes.diff`: edits, deletions and non-ignored new files are captured. Large/binary changes list filenames only. Dependency files created by setup are excluded from new-file evidence; ignored new files are excluded.
+The offline report puts the **result and next step first**. Source badges distinguish Codex runs, simulations and verifier-only checks. Jump from a task result to its run evidence, combine outcome/phase/task filters with search, and reset to all recorded runs. Inspect colored additions/removals, instruction candidates, reported usage and the original logs. Light/dark themes and English/中文 controls change the interface; tasks, instructions and log contents retain their original text.
 
-Other exports: JSON, Markdown, candidate instruction files, a **review-only** `candidate.patch`, and an `issue.md` draft that omits task text, instruction bodies and raw logs by default. No changes are automatically applied and no issue is posted. Review all exports for private content before sharing.
+After upgrading, refresh an existing evidence directory without rerunning the experiment:
 
-To share only the outcome counts:
+```sh
+rulebisect report ../experiment-evidence --open
+# Or find the latest report in this repository's default history:
+rulebisect report --latest --open
+```
+
+The HTML works offline with inline assets. Downloads link only to existing local evidence files; paths with symlinks or unsafe URL delimiters are excluded. Without JavaScript, the status, tables, instruction cards and run evidence remain readable. [Report navigation and status guide](docs/REPORTS.md).
+
+**The full report is private evidence:** tasks, settings, filenames, code diffs and logs can contain repository data. JSON, Markdown, candidate files, review-only patches and the compact Issue draft remain alongside it. No rule changes are automatically applied or issues posted. To export only aggregate outcomes:
 
 ```sh
 rulebisect share ../experiment-evidence --out ../summary.html
 ```
 
-This creates a standalone offline HTML file from a fixed metadata allowlist: status, source, counts and reported token totals. Tasks, instructions, code, filenames, case IDs, models, commands, logs, timestamps and repository paths are omitted. The output must be a new file outside the evidence directory; nothing is uploaded. Review even aggregate statistics before publishing. A summary is not independently authenticated evidence or a complete reproduction bundle. [Sharing details](docs/SHARING.md).
+The summary uses the same visual language, with **no executable JavaScript or links**. A fixed allowlist retains recognized status/source, counts and reported tokens; it excludes tasks, instructions, code, filenames, case IDs, models, commands, logs, timestamps and repository paths. The output must be a new file outside the evidence directory; nothing is uploaded. Review even aggregate statistics before publishing. [Sharing details](docs/SHARING.md).
 
-Statuses: `observed_1_minimal`, `not_reproduced`, `control_failed`, `inconclusive`, `interrupted`, `check_only`. CLI exits 0 for a completed reduction, valid setup/planning operations or an executable initial verifier (even if behavior failed); 2 otherwise.
+Source changes survive workspace cleanup as `changes.diff`: edits, deletions and non-ignored new files are captured. Large/binary changes list filenames only. Setup-created dependencies and ignored new files are excluded from new-file evidence. A reduction candidate is a **smaller failing reproducer**, not a validated fix. Comparison success covers the selected repetitions and tasks only; omitted cases stay visibly untested.
 
 ## Local execution boundaries
 
