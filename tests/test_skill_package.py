@@ -165,7 +165,7 @@ class SkillPackageTests(unittest.TestCase):
                 self.assertTrue(stat.S_ISREG(info.external_attr >> 16))
             self.assertEqual(bundle.read('LICENSE'), (self.source / 'LICENSE').read_bytes())
             metadata = json.loads(bundle.read('plugin.json'))
-            self.assertEqual(metadata['version'], '0.1.0')
+            self.assertEqual(metadata['version'], json.loads((self.plugin / 'plugin.json').read_text(encoding='utf-8'))['version'])
             self.assertNotEqual(metadata['version'], self.version())
 
     def test_archive_never_overwrites_or_writes_inside_bundle(self):

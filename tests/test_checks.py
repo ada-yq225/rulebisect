@@ -105,3 +105,42 @@ class ChecksTests(unittest.TestCase):
         self.assertEqual(subset['status'], 'checks_completed')
         self.assertEqual(full['snapshot_sha256'], subset['snapshot_sha256'])
         self.assertIn('case1.py', subset['protected_files'])
+
+    def test_require_pass_distinguishes_behavior_failures_and_execution_errors(self):
+        for index, (codes, expected) in enumerate((((0, 0), 0), ((0, 1), 1), ((1, 2), 2))):
+            with self.subTest(codes=codes):
+                (self.repo / CONFIG_NAME).write_text(json.dumps(self.make_config(codes)), encoding='utf-8')
+                before = {p.name: p.read_bytes() for p in self.repo.iterdir() if p.is_file()}
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = main(['check', '--repo', str(self.repo), '--all', '--require-pass',
+                                 '--out', str(self.root / f'strict-{index}')])
+                self.assertEqual(code, expected, output.getvalue())
+                self.assertIn('behavior failures', output.getvalue())
+                self.assertEqual(before, {p.name: p.read_bytes() for p in self.repo.iterdir() if p.is_file()})
+                report = json.loads((self.root / f'strict-{index}/report.json').read_text(encoding='utf-8'))
+                self.assertEqual(report['trials'], [])
+
+    def test_require_pass_checks_only_selected_cases_and_discloses_omissions(self):
+        (self.repo / CONFIG_NAME).write_text(json.dumps(self.make_config((0, 1))), encoding='utf-8')
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(['check', '--repo', str(self.repo), '--all', '--require-pass', '--cases', 'case0',
+                         '--out', str(self.root / 'selected-pass')])
+        self.assertEqual(code, 0)
+        self.assertIn('Untested cases: case1', output.getvalue())
+        report = json.loads((self.root / 'selected-pass/report.json').read_text(encoding='utf-8'))
+        self.assertEqual(report['case_selection']['omitted'], ['case1'])
+
+    def test_single_check_require_pass_preserves_default_behavior(self):
+        for verifier_code in (0, 1, 2):
+            (self.repo / 'verify.py').write_text(f'raise SystemExit({verifier_code})', encoding='utf-8')
+            (self.repo / CONFIG_NAME).write_text(json.dumps(self.config), encoding='utf-8')
+            for strict in (False, True):
+                arguments = ['check', '--repo', str(self.repo), '--out',
+                             str(self.root / f'single-{verifier_code}-{strict}')]
+                if strict:
+                    arguments.append('--require-pass')
+                with contextlib.redirect_stdout(io.StringIO()):
+                    code = main(arguments)
+                self.assertEqual(code, verifier_code if strict else 0 if verifier_code in (0, 1) else 2)

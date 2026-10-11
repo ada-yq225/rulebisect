@@ -22,7 +22,7 @@ def history(repo: Path):
                 records.append({'path': str(directory), 'created_at': value['created_at'],
                                 'kind': value.get('kind', 'reduction'), 'status': value.get('status'),
                                 'runner': value.get('runner'), 'runs': len(value.get('trials', [])), 'model': value.get('requested_model')})
-            except (ValueError, OSError, TypeError) as error:
+            except (ValueError, OSError, TypeError, RecursionError) as error:
                 warnings.append(f'{directory.name}: {error}')
     return {'runs': sorted(records, key=lambda record: (record['created_at'], record['path']), reverse=True), 'warnings': warnings,
             'root': str(root), 'model_calls': 0}

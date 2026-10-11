@@ -8,6 +8,8 @@ After [installation](../README.md#install-and-run-your-own-experiment), run thes
 
 ### Start with one real task
 
+Run `rulebisect` for the entry points, or `rulebisect status` inside your repository for offline readiness and exact next steps. Status checks inputs without running setup, verifiers, Codex or login commands. Its exit 2 means inputs need attention; exit 0 means configuration is valid, not that tests pass. Custom configuration is supported with `status --config FILE`.
+
 ```sh
 rulebisect init --wizard
 rulebisect doctor --offline
@@ -15,6 +17,10 @@ rulebisect check --all --open
 ```
 
 The wizard asks for a concrete task and an independent check. Choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` to import several checks, or your test command. It can suggest commands found in project files; it does **not** run those inferred commands. Initialization makes no model calls. Review the selected instructions and protected files in `.rulebisect.json`.
+
+Python suggestions require evidence of pytest or unittest in project configuration or test source. Unknown frameworks get no guessed command. Confirm that your chosen command actually collects the intended checks.
+
+Already using a custom instruction or Skill file? Use `rulebisect init --wizard --instructions rules.md`. Explicit files are validated before prompts or writes. JSON configuration errors name the selected file and the syntax error's line/column.
 
 For an output-based task, [JSON assertions](ASSERTIONS.md) let you start without writing a verifier. Try the [complete output-contract fixture](../examples/output-contract/README.md). Saved checks are frozen; editing the input JSON later does not alter the verifier.
 
@@ -26,6 +32,10 @@ rulebisect init --task "Implement normalize_label in labels.py." \
 ```
 
 `check --all` runs setup and every case's verifier on fresh initial snapshots without Codex. Exit 0 means each verifier completed with 0 (pass) or 1 (behavior failure); **it does not mean all behaviors passed**. A failure can be expected before the task is implemented. Exit 2 indicates infrastructure trouble. Some frameworks also use 1 for import or setup errors: inspect the report, or use a verifier that returns 0 for pass, 1 for behavior failure, and 2+ for infrastructure failure.
+
+For an automation gate, use `rulebisect check --all --require-pass`: selected passing behaviors exit 0, behavior failures exit 1, and execution problems exit 2. With `--cases`, omitted cases remain explicitly untested. A single `check` supports the same option.
+
+Checks use fresh snapshots of Git-tracked working files, plus selected instructions, the oracle and protected files. An ordinary untracked file will not appear there even if it exists in your source folder. Explicitly track the source/output files that should be part of the initial baseline; generated output may instead be expected to fail until the task is implemented.
 
 ### Keep regression cases
 
@@ -68,6 +78,7 @@ Inspect regressions, remaining failures and uncertainty individually. Passing th
 
 | Your problem | Start here |
 |---|---|
+| I do not know which step is next | `rulebisect status` |
 | I want to try it without Codex | `rulebisect demo --scenario regression --open` |
 | I have a concrete failing task and check | `rulebisect init --wizard`, then `check --all` |
 | My check cannot run reliably | Read the `check --all --open` report; fix setup or the verifier first |
@@ -84,6 +95,8 @@ Reduction's `candidate/` is a smaller **failing reproducer**, not a proposed fix
 
 ### 从一个真实任务开始
 
+直接运行 `rulebisect` 查看入口，或在目标仓库运行 `rulebisect status` 获取离线就绪状态和可复制的下一步命令。状态检查不运行准备命令、验证器、Codex 或登录命令；退出 2 表示输入需要处理，退出 0 只表示配置有效，不代表测试通过。自定义配置可使用 `status --config FILE`。
+
 ```sh
 rulebisect init --wizard
 rulebisect doctor --offline
@@ -92,9 +105,17 @@ rulebisect check --all --open
 
 向导需要具体任务和独立检查。检查步骤可选 `:exists`、`:contains` 或 `:json`，`@checks.json` 导入多个条件，也可以填已有测试命令。它可以根据项目文件建议命令，但**不会执行推测出的命令**。初始化不调用模型。检查 `.rulebisect.json` 中选择的指令文件和保护文件；已有的 `init --task "..." --check "..." --model MODEL` 用法仍然可用。
 
+Python 命令建议需要项目配置或测试源码中的 pytest / unittest 依据；框架不明时不会猜测命令。请确认所选命令确实收集到了要检查的测试。
+
+已有自定义规则或 Skill 文件时，可运行 `rulebisect init --wizard --instructions rules.md`。显式文件在提示和写入前检查；配置 JSON 错误会指出实际文件及语法错误的行列。
+
 文件输出任务可用 [JSON 断言](ASSERTIONS.md)，无需编写验证脚本；可直接跟做[完整案例](../examples/output-contract/README.md)。条件保存后会固化，修改输入 JSON 不会更新已保存验证器。
 
 `check --all` 在新的初始快照中执行每个案例的 setup 和验证器，不调用 Codex。退出 0 表示各验证器以 0（通过）或 1（行为失败）结束，**不代表全部行为通过**。任务尚未实现时，行为失败可能正是预期。退出 2 表示环境或执行故障。部分测试框架会把导入错误也归为 1，因此要看报告；必要时使用明确区分 0、1、2+ 的 Python 验证器。
+
+自动化需要要求行为通过时，使用 `rulebisect check --all --require-pass`：选中检查通过退出 0，行为失败退出 1，执行故障退出 2。搭配 `--cases` 时其余案例仍会明确显示未测试；单个 `check` 同样支持这个选项。
+
+初始快照包含 Git 已跟踪的工作文件，以及选中的指令、验证器和保护文件。普通未跟踪文件即使存在于原目录，也不会进入新快照；需要作为初始基线的代码或输出文件应显式跟踪。任务尚未生成输出时，行为失败可能正是预期。
 
 ### 把案例保存下来
 
@@ -133,6 +154,7 @@ rulebisect compare --proposed ../proposed-rules --open
 
 | 你遇到的问题 | 先运行什么 |
 |---|---|
+| 不知道当前该做哪一步 | `rulebisect status` |
 | 想先体验，不使用 Codex | `rulebisect demo --scenario regression --open` |
 | 已有具体失败任务和验证方法 | `init --wizard`，然后 `check --all` |
 | 验证器跑不起来 | 查看 `check --all --open` 报告，先修好环境或验证器 |
