@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 
 from .comparison import suite_cases
+from .configuration import parse_configuration
 
 
 def _safe_config_path(path: Path) -> Path:
@@ -17,18 +18,21 @@ def _safe_config_path(path: Path) -> Path:
     path = Path(path)
     path = path.parent.resolve() / path.name
     if path.is_symlink():
-        raise ValueError('Config files must not be symlinks')
+        raise ValueError(f'Config files must not be symlinks: {path}. Select the original JSON file with --config PATH.')
+    if path.is_dir():
+        raise ValueError(f'Configuration path is a directory: {path}. Select a JSON file with --config PATH.')
     if not path.is_file():
-        raise ValueError(f'Config file does not exist: {path}. Run rulebisect init first.')
+        raise ValueError(f'Configuration file not found: {path}. Check the selected path and choose an existing file with --config PATH. For first-time setup, run rulebisect init --wizard in your repository.')
     return path
 
 
 def _load_config(config_path: Path) -> tuple[Path, dict, bytes]:
     path = _safe_config_path(config_path)
-    original = path.read_bytes()
-    config = json.loads(original.decode('utf-8'))
-    if not isinstance(config, dict):
-        raise ValueError('Config must be a JSON object')
+    try:
+        original = path.read_bytes()
+    except OSError as error:
+        raise ValueError(f'Cannot read configuration: {path}. Check file permissions and select a readable JSON file with --config PATH.') from error
+    config = parse_configuration(path, original)
     suite_cases(config)
     return path, config, original
 

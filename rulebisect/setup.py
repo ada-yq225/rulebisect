@@ -9,6 +9,8 @@ import sys
 import uuid
 from pathlib import Path
 
+from .configuration import load_configuration
+
 
 CONFIG_NAME = '.rulebisect.json'
 
@@ -17,7 +19,7 @@ def git_root(path: Path) -> Path:
     result = subprocess.run(['git', '-c', 'core.fsmonitor=false', 'rev-parse', '--show-toplevel'],
                             cwd=path, capture_output=True, text=True, timeout=10)
     if result.returncode:
-        raise ValueError('Not inside a Git repository. Run git init and git add for the fixture first.')
+        raise ValueError('Not inside a Git repository. Run inside your project repository, or select one with --repo PATH. Use rulebisect demo to explore without preparing a repository.')
     return Path(result.stdout.strip()).resolve()
 
 
@@ -141,9 +143,7 @@ def validate_configuration(repo: Path, config_path: Path, proposed: Path | None 
     from .comparison import Comparison, suite_cases
     from .experiment import Experiment
 
-    config = json.loads(config_path.read_text(encoding='utf-8'))
-    if not isinstance(config, dict):
-        raise ValueError('Config must be a JSON object')
+    config = load_configuration(config_path)
     out = repo.parent / f'rulebisect-preflight-{uuid.uuid4().hex}'
     settings = (config.get('model'), config.get('repeats', 3),
                 config.get('max_runs', 60), config.get('timeout', 300))
@@ -178,12 +178,12 @@ def doctor(repo: Path, *, offline: bool = False, config_path: Path | None = None
         root = git_root(repo)
         add('Git repository', True, str(root))
         config = config_path or root / CONFIG_NAME
-        add('Experiment config', config.is_file(), str(config) if config.is_file() else 'Run rulebisect init')
         if config.is_file():
+            add('Experiment config', True, str(config))
             try:
                 scope = validate_configuration(root, config, proposed)
                 add('Experiment inputs', True, 'Snapshot, instruction files, verifier roles and budgets validated')
-                configured = json.loads(config.read_text(encoding='utf-8'))
+                configured = load_configuration(config)
                 if not configured.get('model'):
                     warnings.append('No saved model; choose --model MODEL when running.')
                 if proposed is None and scope['comparison_calls'] > scope['max_runs']:
@@ -192,7 +192,17 @@ def doctor(repo: Path, *, offline: bool = False, config_path: Path | None = None
                     warnings.append('Setup was validated but not executed; use rulebisect check to test the environment.')
             except (ValueError, OSError, subprocess.SubprocessError) as error:
                 add('Experiment inputs', False, str(error))
+        elif config_path is not None or config.exists() or config.is_symlink():
+            # An explicit path or invalid existing default is a configuration
+            # problem, rather than an invitation to initialize another file.
+            try:
+                load_configuration(config)
+            except ValueError as error:
+                add('Experiment config', False, str(error))
+            else:
+                add('Experiment config', False, f'Configuration changed during validation: {config}. Retry with a stable file.')
         else:
+            add('Experiment config', False, f'Configuration file not found: {config}. Run rulebisect init --wizard in your repository.')
             files = discover_instructions(root)
             add('Instruction files', bool(files), ', '.join(files) or 'None found; select files with init --instructions')
     except (ValueError, OSError, subprocess.SubprocessError) as error:
@@ -223,9 +233,9 @@ def draft_instructions(repo: Path, out: Path) -> Path:
     if out.is_relative_to(repo) or (out.exists() and any(out.iterdir())):
         raise ValueError('Draft output must be an empty directory outside the repository')
     path = repo / CONFIG_NAME
-    if path.is_file():
-        config = json.loads(path.read_text(encoding='utf-8'))
-        selected = config.get('instructions') if isinstance(config, dict) else None
+    if path.exists() or path.is_symlink():
+        config = load_configuration(path)
+        selected = config.get('instructions')
     else:
         selected = discover_instructions(repo)
     if not isinstance(selected, list) or not selected or any(not isinstance(name, str) or not name for name in selected):

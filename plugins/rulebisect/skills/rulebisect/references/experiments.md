@@ -1,8 +1,10 @@
 # Set up, reduce, compare
 
-All commands below follow `python3 "<skill-directory>/scripts/rulebisect_cli.py"`; replace placeholders and quote paths. Choose a Python 3.11+ interpreter. Use `--repo REPO` explicitly. Custom `--config CONFIG` is supported by doctor, plan, check, run, compare, resume and case commands; consult the command's `--help` for its options. Next-step messages from the engine may show a bare `rulebisect` command: use the same bundled launcher prefix instead.
+All commands below follow `python3 "<skill-directory>/scripts/rulebisect_cli.py"`; replace placeholders and quote paths. Choose a Python 3.11+ interpreter. Use `--repo REPO` explicitly. Custom `--config CONFIG` is supported by status, doctor, plan, check, run, compare, resume and case commands; consult the command's `--help` for its options. Next-step messages from the engine may show a bare `rulebisect` command: use the same bundled launcher prefix instead.
 
 ## New failure
+
+If setup already exists or the next step is unclear, start with `status --repo REPO --json`. Its `next_steps` contain argument arrays; substitute the bundled launcher for their `rulebisect` prefix. Status validates inputs offline, makes no model calls and executes no setup/verifier. Missing or invalid inputs return exit 2 with an actionable state; valid configuration returns 0, which does not establish that tests pass or Codex is ready.
 
 ```text
 init --repo REPO --task "Concrete task" --check "python -m unittest tests.test_contract"
@@ -14,7 +16,11 @@ check --all --repo REPO
 
 Use exactly one of `--check COMMAND`, `--oracle verifier.py`, or `--assertions checks.json` at init. An oracle is repository-relative Python and returns 0/1/2+ for pass/behavior failure/infrastructure failure. A test command is wrapped into a protected Python oracle. Existing instructions are discovered from tracked AGENTS.md/AGENTS.override.md and untracked root instructions; review the selection. Skill files and untracked nested instructions require explicit `--instructions` selection.
 
+An interactive session can use `init --wizard --repo REPO --instructions rules.md` for custom instructions. Invalid selected paths are rejected before prompts or configuration writes.
+
 Init writes configuration and, when needed, a generated verifier. It does not execute setup, checks or a model. Setup commands are optional and saved with `--setup "COMMAND"`. Accept the actual command before executing `check` or a model experiment. Protect other acceptance files that must remain fixed.
+
+Snapshots contain Git-tracked working files plus explicitly selected instructions, oracle and protected files. Other untracked source, dependency or output files are absent from fresh checks and experiments. When an existing file must be part of the baseline, explain this before asking the user to track it; do not `git add` unrelated files automatically. Missing generated output can be an expected initial behavior failure.
 
 After checking the verifier and obtaining authorization for the selected model and budget:
 
@@ -65,3 +71,5 @@ resume --repo REPO --from EVIDENCE --model MODEL --repeats REPEATS --max-runs AP
 Resume uses matching tool version, settings and snapshot, reuses stable search evidence and performs fresh controls. Supply the same model, repeats and other overridden settings (such as timeout and unit mode) as the original run; it does not automatically import those options from the report. Its cap includes previous runs. Simulations, comparisons and verifier checks do not support resume; rerun them in a new directory when needed. Rendering old reports is supported and does not change the original recorded tool version or trial results.
 
 Real run/compare exits 0 for `observed_1_minimal` or `no_regressions_observed`, and 2 for other reported statuses, including `not_reproduced`. Inspect the report rather than treating every exit 2 as an installation failure. A demo that correctly catches its constructed regression exits 0. Check --all exits 0 when verifiers execute with 0/1 outcomes and 2 for execution trouble, regardless of expected initial behavioral failures.
+
+For a contract that must already pass, `check --all --require-pass` exits 0 for selected passing behaviors, 1 for behavior failures and 2 for execution trouble. With `--cases`, omitted tasks remain untested. The same option works on a single check; it changes the exit policy, not verifier execution or report meaning.

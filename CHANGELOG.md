@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 / Skill and plugin 0.2.0 — Clear next steps
+
+- Running `rulebisect` without arguments now offers a simulation, workspace status and guided setup, with no repository commands or model calls.
+- Added offline `status` with input readiness, selected instructions/cases, saved budgets, exact next-command arguments and a link to the latest saved evidence. Old evidence is explicitly separate from current readiness; status never runs setup, verifiers, Codex or login checks.
+- Guided setup accepts `--instructions FILE ...` for custom rules and Skills, with selection validated before prompts or writes.
+- Python check suggestions now require framework evidence in project configuration or a bounded static read of test files. Unknown frameworks are not guessed, reducing accidental zero-test checks; project test code is never imported or executed to make a suggestion.
+- Configuration errors now include the actual path and, for JSON syntax errors, line and column. Missing files, directories, non-UTF-8 content and excessive nesting return actionable errors instead of tracebacks across setup, cases and experiments.
+- Initial checks show behavior failures separately from execution errors, with per-case report paths and omitted-case disclosure. Optional `check --require-pass` exits 1 for observed behavior failures, 2 for execution errors and 0 when selected checks pass; the default accepts initial behavior failures as before.
+- Bundled the updated engine in Skill/plugin 0.2.0. Real model execution remains explicit and bounded; this update is validated with local verifiers and simulations.
+
 ## Skill / plugin 0.1.0 — Bundled Codex workflow
 
 - Added a Codex-only Skill for experiment setup, independent acceptance checks, instruction reduction, proposed-rule comparisons and saved evidence review. Its entrypoint includes RuleBisect engine 0.7.0 and requires no pip install.

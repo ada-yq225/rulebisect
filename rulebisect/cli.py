@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import __version__
+from .configuration import load_configuration
 from .comparison import Comparison, select_cases
 from .checks import SuiteCheck
 from .onboarding import run_wizard
@@ -16,6 +17,7 @@ from .suite import add_case, list_cases, remove_case
 from .assertions import validate_assertions
 from .share import export_summary
 from .history import history, latest_report
+from .status import format_command, print_status, workspace_status
 from .core import split_rules
 from .demo import run_demo, run_comparison_demo
 from .experiment import Experiment
@@ -53,11 +55,7 @@ def add_experiment_options(parser):
 def experiment_from(args):
     repo = git_root(args.repo)
     config_path = args.config or repo / CONFIG_NAME
-    if not config_path.is_file():
-        raise ValueError(f'Config missing: {config_path}. Start with rulebisect init --wizard')
-    config = json.loads(config_path.read_text(encoding='utf-8'))
-    if not isinstance(config, dict):
-        raise ValueError('Config must be a JSON object')
+    config = load_configuration(config_path)
     if args.unit_mode:
         config['unit_mode'] = args.unit_mode
     if args.command == 'compare' or (args.command == 'check' and getattr(args, 'all', False)):
@@ -78,6 +76,15 @@ def experiment_from(args):
 
 
 def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv:
+        print(f'RuleBisect {__version__} — debug Codex rules and catch instruction regressions.\n'
+              '\nTry a simulation:  rulebisect demo --scenario regression --open\n'
+              'See your next step: rulebisect status\n'
+              'Set up a task:      rulebisect init --wizard\n'
+              'All commands:       rulebisect --help\n'
+              '\nThese entry points make no model calls. Real run/compare/resume executions use your Codex account.')
+        return 0
     parser = argparse.ArgumentParser(description='RuleBisect — investigate Codex instruction failures. MIT / local-first.')
     parser.add_argument('--version', action='version', version=__version__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -103,6 +110,10 @@ def main(argv=None) -> int:
     doc.add_argument('--offline', action='store_true', help='Validate repository inputs without checking Codex or login')
     doc.add_argument('--config', type=Path, help='Use a custom experiment config')
     doc.add_argument('--proposed', type=Path, help='Also validate a proposed instruction directory and exact comparison budget')
+    status = commands.add_parser('status', help='Show offline input readiness, saved evidence and next steps; no model calls')
+    status.add_argument('--repo', type=Path, default=Path.cwd())
+    status.add_argument('--config', type=Path, help='Use a custom experiment config')
+    status.add_argument('--json', action='store_true', help='Print readiness and suggested argument arrays')
     inspect = commands.add_parser('inspect', help='Inspect the instruction units; no model calls')
     inspect.add_argument('files', nargs='*', type=Path)
     inspect.add_argument('--repo', type=Path, default=Path.cwd())
@@ -116,6 +127,7 @@ def main(argv=None) -> int:
     check.add_argument('--all', action='store_true', help='Check setup and verifier for every suite case without Codex')
     check.add_argument('--cases', nargs='+', help='Select case ids when using --all')
     check.add_argument('--open', action='store_true')
+    check.add_argument('--require-pass', action='store_true', help='Exit 1 for behavior failures, 2 for execution errors; default accepts initial behavior failures')
     run = commands.add_parser('run', help='Run an experiment using your local Codex login and quota')
     add_experiment_options(run)
     run.add_argument('--open', action='store_true', help='Open the completed HTML report')
@@ -163,6 +175,13 @@ def main(argv=None) -> int:
     hist.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
+        if args.command == 'status':
+            result = workspace_status(args.repo, args.config)
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                print_status(result)
+            return 0 if result['ok'] else 2
         if args.command == 'share':
             path = export_summary(args.path, args.out)
             print(f'Summary saved: {path}\nIncludes aggregate outcomes only; no tasks, code, names or logs. Review before sharing. No upload or model calls.')
@@ -208,15 +227,15 @@ def main(argv=None) -> int:
         if args.command == 'init':
             repo = git_root(args.repo)
             if args.wizard:
-                if any((args.task, args.check, args.oracle, args.assertions, args.model, args.setup, args.instructions)):
-                    raise ValueError('Use init --wizard --repo PATH, or provide explicit init options without --wizard')
-                run_wizard(repo)
+                if any((args.task, args.check, args.oracle, args.assertions, args.model, args.setup)):
+                    raise ValueError('Use init --wizard --repo PATH [--instructions FILE ...], or provide explicit init options without --wizard')
+                run_wizard(repo, instructions=args.instructions)
                 return 0
             if not args.task or not (args.check or args.oracle or args.assertions):
                 raise ValueError('Use init --wizard, or provide --task and --check/--oracle/--assertions')
             path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup,
                                assertions=load_assertions(args.assertions))
-            print(f'Created {path}\nNext: rulebisect plan\nThen: rulebisect check (test the verifier without Codex)\nFinally: rulebisect run')
+            print(f'Created {path}\nNext: {format_command(["rulebisect", "status", "--repo", str(repo)])}')
             if not args.model:
                 print('Choose --model MODEL when running, or add model to the config.')
             print('Tracked test files were added to protected_files. Review this list and the selected instruction files.')
@@ -298,15 +317,35 @@ def main(argv=None) -> int:
                     config = dict(experiment.config, model=experiment.model, repeats=experiment.repeats,
                                   max_runs=experiment.max_runs, timeout=experiment.timeout, max_tokens=experiment.max_tokens)
                     report = SuiteCheck(experiment.repo, config, out).execute()
+                    counts = {outcome: sum(case['outcome'] == outcome for case in report['cases'])
+                              for outcome in ('pass', 'fail', 'error', 'pending')}
+                    print(f"Checks: {counts['pass']} passed, {counts['fail']} behavior failures, {counts['error']} execution errors, {counts['pending']} pending.")
+                    omitted = report.get('case_selection', {}).get('omitted', [])
+                    if omitted:
+                        print(f"Untested cases: {', '.join(omitted)}")
+                    for case in report['cases']:
+                        if case['outcome'] in ('fail', 'error'):
+                            print(f"  {case['id']} details: {out / 'cases' / case['id'] / 'report.html'}")
                     print(f"{report['status']}: {report['message']}\nReport: {out / 'report.html'}")
                     if args.open:
                         webbrowser.open((out.resolve() / 'report.html').as_uri())
-                    return 0 if report['status'] == 'checks_completed' else 2
+                    if report['status'] != 'checks_completed':
+                        return 2
+                    return 1 if args.require_pass and counts['fail'] else 0
                 result = experiment.check_initial()
-                print(f'Verifier on original snapshot: {result}\nNo Codex calls. Log: {out / "check.log"}')
+                code = result.get('exit_code')
+                outcome = 'passed' if code == 0 else 'behavior failure' if code == 1 else 'execution error'
+                print(f'Initial snapshot: {outcome} (exit {code}).')
+                if code == 1:
+                    print('Behavior failures can be expected before the task is implemented; inspect the check before running Codex.')
+                elif code != 0:
+                    print('Fix setup or the verifier before running Codex.')
+                if result.get('reason'):
+                    print(result['reason'])
+                print(f'No Codex calls. Report: {out / "report.html"}\nLogs: {out}')
                 if args.open:
                     webbrowser.open((out.resolve() / 'report.html').as_uri())
-                return 0 if result.get('exit_code') in (0, 1) else 2
+                return (1 if args.require_pass and code == 1 else 0) if code in (0, 1) else 2
             if not experiment.model:
                 raise ValueError('Choose --model MODEL, or save model with init --model MODEL.')
             print(f'Using your local Codex login. Model: {experiment.model}; total run cap: {experiment.max_runs}.\nEvidence: {out}', flush=True)

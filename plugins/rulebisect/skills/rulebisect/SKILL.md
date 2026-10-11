@@ -32,9 +32,13 @@ If success is subjective or no independent check exists, help define a useful ac
 
 Reuse an existing `.rulebisect.json` when it matches the requested task; do not overwrite it to initialize again. For a new configuration, use a user-specified check or help create one. Prefer direct `init --task ... --check ...`, `--oracle ...`, or `--assertions ...` arguments when the inputs are known; `--wizard` is useful for an interactive session. Read [references/assertions.md](references/assertions.md) only when choosing file/text/JSON checks.
 
+When the existing setup or next step is unclear, `status --repo REPO --json` summarizes offline input readiness, saved scope/budget and suggested argument arrays. It executes no setup, verifier, login or model command. Saved evidence is a navigation aid and may describe an older snapshot. Guided setup accepts `--instructions FILE ...` for explicitly selected custom rules or Skills.
+
 Inspect selected instructions, verifier/protected paths, setup commands and suite scope. Keep the acceptance criteria independent of the agent and fixed while testing. `doctor --offline` and `plan` validate inputs without executing setup or the verifier. `check --all` executes the trusted setup and verifiers on initial snapshots, with zero model calls. Use existing task authorization for these operations; do not execute an inferred setup or test command that the user has not accepted.
 
 Verifier exit 0 means behavior passes; 1 means behavior fails and may be expected on initial code; other results mean execution/environment trouble. A combined `checks_completed` result says the verifiers ran, not that all behaviors passed. Inspect failures before starting Codex. `--check` and `--setup` commands use argv parsing, not shell pipes or expansion; put multiple steps in a trusted wrapper script.
+
+Use `check --require-pass` only when the requested contract must already pass or when setting up a CI gate: behavior failures then exit 1, execution trouble exits 2, and selected passes exit 0. The option does not change the evidence or run a model.
 
 ## Run within the agreed scope
 

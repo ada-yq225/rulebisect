@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "rulebisect",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Investigate reproducible Codex instruction failures and compare proposed repository rules with independent checks.",
   "author": {
     "name": "ada-yq225",
@@ -44,7 +44,7 @@
         "logo": "./assets/rulebisect.svg"
       },
       "publication": {
-        "release_notes": "Initial self-contained Codex Skill distribution with RuleBisect engine 0.7.0, bounded experiment workflows and offline evidence.",
+        "release_notes": "RuleBisect engine 0.8.0 adds offline next-step guidance, guided custom instructions, actionable configuration errors and optional pass-required checks for automation.",
         "translations": {
           "zh-CN": {
             "subtitle": "排查 Codex 指令与任务回退",

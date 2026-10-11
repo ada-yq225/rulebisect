@@ -63,12 +63,12 @@ The first catches a proposed rule that fixes modern labels but breaks legacy lab
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.7.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.7.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.8.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.8.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.7.0/rulebisect-0.7.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.8.0/rulebisect-0.8.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -86,6 +86,7 @@ python -m pip install .
 Inside the Git repository you want to investigate, start with the guided flow:
 
 ```sh
+rulebisect status
 rulebisect init --wizard
 rulebisect doctor --offline
 rulebisect check --all --open
@@ -93,6 +94,14 @@ rulebisect run --model YOUR_CODEX_MODEL_ID --open
 ```
 
 The wizard collects your task, independent check, optional environment setup and model. At the check prompt, choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` for several checks, or your test command. Command suggestions require an explicit choice. It does not install dependencies or run checks/model calls. Review `instructions` and `protected_files` before a real run.
+
+Not sure what comes next? `rulebisect status` checks inputs offline and shows commands for the selected repository/config, case scope, saved budget and latest evidence. It makes no model calls and does not execute setup or tests. Saved evidence may describe an older snapshot. Running `rulebisect` alone shows the starting commands.
+
+For an existing custom instruction or Skill file, keep the guided setup:
+
+```sh
+rulebisect init --wizard --instructions rules.md
+```
 
 ### Check output without writing a verifier
 
@@ -158,6 +167,7 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 
 | Command | Purpose | Model calls |
 |---|---|---|
+| `status` | Show offline input readiness, saved scope/budget and exact next steps | No |
 | `doctor` | Check Python, Git, Codex version, login and setup | No |
 | `init --wizard` / `init` | Generate configuration and an independent check wrapper | No |
 | `inspect` | Show instruction units with original file/line references | No |
@@ -202,6 +212,8 @@ rulebisect check --all --open
 Your original task remains in the suite. `case add` accepts a trusted check command, `--oracle existing-verifier.py`, or `--assertions checks.json`; no command or model is executed. JSON checks are frozen when the case is saved. Configuration changes are atomic. `case remove ID` removes the entry and keeps verifier files. IDs are portable, unique names; the last case cannot be removed. Case commands accept `--repo` and `--config`.
 
 `check --all` runs setup and each verifier on its own frozen initial snapshot, then produces a combined report. Exit 0 means all checks returned 0 or 1; **it does not mean every behavior passed**. Initial unimplemented tasks may fail as expected. Exit 2 means infrastructure trouble or interruption. Check assertions/logs: some frameworks use exit 1 for setup/import errors too. This checks the local verifier environment, not Codex's sandbox.
+
+For CI or a task that must already pass, use `rulebisect check --all --require-pass`: exit 0 means the selected checks passed, 1 means at least one behavior failed, and 2 means execution trouble. It still makes no model calls. With `--cases`, only the selected cases are checked; the others are listed as untested. `--require-pass` also works for a single `check`.
 
 ## Check a proposed fix before applying it
 

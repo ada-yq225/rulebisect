@@ -1,3 +1,15 @@
+# Validation — v0.8.0 / Codex Skill and plugin 0.2.0
+
+Executed on macOS, 2026-10-11. This update improves onboarding and offline workflow guidance; it does not measure model effectiveness.
+
+- All **222 automated tests passed** on Python 3.11.15. The 27 guided-setup tests also passed on Python 3.14.4. New coverage includes custom instruction selection before prompts/writes, framework suggestions without project-code execution, missing/malformed/deep configuration, offline status, unavailable optional history and strict check exit codes for selected cases.
+- Built and installed the 0.8.0 wheel in an isolated Python 3.11 environment. From outside the checkout, the installed workflows completed custom-file wizard setup, structured status, suite management, baseline checks, strict behavior-failure rejection, no-code assertions and aggregate-only sharing. Saved verification criteria remained unchanged and private fixture text was absent from the exported summary.
+- The installed fix simulation completed eight deterministic simulator executions with `no_regressions_observed`. This is constructed workflow evidence, not a model-performance result.
+- The official skill-creator validator passed. The plugin 0.2.0 and standalone Skill archives include engine 0.8.0; builder checks confirm all 20 allowlisted modules and MIT license copies match canonical source. The full suite checks extracted archives outside the checkout, import isolation, paths with spaces, exit-code preservation, reproducible packaging and missing-runtime refusal.
+- An independent agent followed the actual bundled launcher in a fresh Git repository with custom instructions and no AGENTS.md. Guided JSON assertions, offline status and seven verifier-only checks completed; strict checks rejected missing/legacy output and accepted tracked modern output. Original instructions and verification criteria were preserved. Ordinary untracked output was correctly excluded from snapshots; the quickstart and Skill now explain how to choose the initial baseline.
+- **No actual Codex/model calls were made for this update.** Status and suggestions do not execute setup, verifiers or login commands. Initial checks execute user-selected local setup/verifiers; real experiments remain explicit and budgeted.
+- No package has been submitted for OpenAI review in this update; portal scanning and directory acceptance remain unverified. Cross-platform CI runs Linux/macOS/Windows × Python 3.11/3.13, installed workflows, simulations, media validation and report-control logic checks. Revision-specific results are recorded in GitHub Actions after pushing.
+
 # Validation — Codex Skill / plugin 0.1.0
 
 Executed on macOS, 2026-10-08. This distribution bundles the unchanged RuleBisect 0.7.0 engine; it does not establish model effectiveness or OpenAI directory acceptance.

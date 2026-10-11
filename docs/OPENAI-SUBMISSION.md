@@ -1,19 +1,19 @@
 # Install and submit RuleBisect / 安装与 OpenAI 投稿
 
 **Status: ready-for-upload; not submitted.** Developer identity verification has
-not been completed. This package has not been approved or listed by OpenAI.
-**状态：待上传，尚未提交。** 开发者身份验证尚未完成；不代表已获审核通过或官方收录。
+not been confirmed for this submission. This package has not been approved or listed by OpenAI.
+**状态：待上传，尚未提交。** 本次投稿的开发者身份验证尚未确认；不代表已获审核通过或官方收录。
 
-The Skill/plugin package is **0.1.0** and includes the **RuleBisect 0.7.0** engine.
+The Skill/plugin package is **0.2.0** and includes the **RuleBisect 0.8.0** engine.
 Use Python **3.11+** and Git. No `pip install` is needed. Real experiments additionally
 need an installed Codex CLI using your existing login and quota or billing.
-Skill/插件包版本为 **0.1.0**，内置引擎为 **0.7.0**；需要 Python **3.11+** 和 Git，
+Skill/插件包版本为 **0.2.0**，内置引擎为 **0.8.0**；需要 Python **3.11+** 和 Git，
 无需 pip 安装。真实实验另需已安装并登录的 Codex CLI，使用你的现有额度或计费。
 
-[Download the Skill/plugin ZIPs and checksums / 下载 ZIP 与校验和](https://github.com/ada-yq225/rulebisect/releases/tag/skill-v0.1.0).
-Local validation: **178 tests passed**, including extracted-package workflows;
+[Download the Skill/plugin ZIPs and checksums / 下载 ZIP 与校验和](https://github.com/ada-yq225/rulebisect/releases/tag/v0.8.0).
+Local validation includes extracted-package workflows;
 this distribution's validation used **zero real model calls**. See [validation limits](../VALIDATION.md).
-本地验证通过 **178 项测试**，包含解压后的独立运行；本次分发验证**零真实模型调用**。
+本地验证包含解压后的独立运行；本次分发验证**零真实模型调用**。
 
 ## Choose one installation / 选择一种安装方式
 
@@ -45,7 +45,7 @@ In Codex, ask the built-in installer to use the exact Skill directory:
 $skill-installer Install the rulebisect skill from https://github.com/ada-yq225/rulebisect/tree/main/plugins/rulebisect/skills/rulebisect
 ```
 
-Alternatively, use `rulebisect-skill-0.1.0.zip`. It has `SKILL.md` at the archive root;
+Alternatively, use `rulebisect-skill-0.2.0.zip`. It has `SKILL.md` at the archive root;
 extract into a **new** `~/.codex/skills/rulebisect/` directory on macOS/Linux or
 `%USERPROFILE%\.codex\skills\rulebisect\` on Windows. Stop if that directory exists.
 也可使用独立 Skill ZIP；包根目录直接含 `SKILL.md`，解压到上述**新建**目标目录。
@@ -58,7 +58,7 @@ if [ -e "$HOME/.codex/skills/rulebisect" ] || [ -L "$HOME/.codex/skills/rulebise
   echo "Already installed; inspect before replacing."
 else
   mkdir -p "$HOME/.codex/skills/rulebisect"
-  unzip -n rulebisect-skill-0.1.0.zip -d "$HOME/.codex/skills/rulebisect"
+  unzip -n rulebisect-skill-0.2.0.zip -d "$HOME/.codex/skills/rulebisect"
 fi
 ```
 
@@ -91,11 +91,11 @@ python3 plugins/rulebisect/skills/rulebisect/scripts/rulebisect_cli.py demo --sc
 ```
 
 For a standalone installation, substitute the installed Skill path; on Windows
-use your Python 3.11+ interpreter. The expected engine version is `0.7.0`. The demo
+use your Python 3.11+ interpreter. The expected engine version is `0.8.0`. The demo
 is a constructed simulation with **zero model calls**. `doctor --offline` and `plan`
 also need no model calls; `check` runs trusted setup/verifiers without an agent.
 独立安装时替换为已安装的 Skill 路径；Windows 使用你的 Python 3.11+ 解释器。
-引擎版本应为 `0.7.0`。演示是**零模型调用**的构造模拟；离线诊断和计划也不调用模型，
+引擎版本应为 `0.8.0`。演示是**零模型调用**的构造模拟；离线诊断和计划也不调用模型，
 `check` 会执行已接受的准备命令和验证器，但不运行代理。
 
 The Skill declares `products: [CODEX]` and `allow_implicit_invocation: true`.
@@ -107,10 +107,10 @@ Skill 仅声明用于 Codex，允许按任务隐式启用；明确用户指令�
 
 ## Submit to OpenAI / 向 OpenAI 投稿
 
-Use **`rulebisect-plugin-0.1.0.zip`**, not the standalone Skill ZIP, for the public
+Use **`rulebisect-plugin-0.2.0.zip`**, not the standalone Skill ZIP, for the public
 plugin submission. It contains the plugin manifest, branding and bundled Skill;
 there is no MCP server, remote authentication configuration or lifecycle hook.
-官方插件投稿使用 **`rulebisect-plugin-0.1.0.zip`**，而非独立 Skill ZIP；包内含插件
+官方插件投稿使用 **`rulebisect-plugin-0.2.0.zip`**，而非独立 Skill ZIP；包内含插件
 清单、图标和 Skill，不含 MCP、远程认证配置或生命周期 hooks。
 
 1. Select your organization/project and complete individual developer verification.

@@ -8,6 +8,12 @@
 
 [先看演示](#先看效果无需-codex-账户) · [使用 Codex Skill](#作为-codex-skill-使用) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
 
+不知道下一步怎么做时，在目标仓库运行 `rulebisect status`。它会离线检查配置，列出案例、预算、最近证据和可复制的下一步命令，不运行准备命令、测试或 Codex。直接运行 `rulebisect` 也会显示上手入口。旧报告只代表保存时的快照，不代表当前配置或行为已通过验证。
+
+已有自定义规则文件或 Skill 时，可使用 `rulebisect init --wizard --instructions rules.md` 继续向导。配置 JSON 出错会标明实际文件路径和行列，方便直接修正。
+
+需要在 CI 中要求行为全部通过时，使用 `rulebisect check --all --require-pass`：退出 0 表示选中检查通过，1 表示行为失败，2 表示执行故障；默认检查仍允许任务尚未实现时的行为失败。`--cases` 只检查选中案例，其余会明确显示未测试。
+
 ## 作为 Codex Skill 使用
 
 [RuleBisect Skill](plugins/rulebisect/skills/rulebisect/SKILL.md) 引导配置、独立验证、有预算的实验和证据解读。内置引擎，无需 pip 安装；需要 Python 3.11+ 和 Git。真实实验还需要已登录的 Codex CLI。
@@ -65,12 +71,12 @@ rulebisect demo --scenario fix --open
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.7.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.7.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.8.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.8.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.7.0/rulebisect-0.7.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.8.0/rulebisect-0.8.0-py3-none-any.whl
 ```
 
 或者从源码安装：

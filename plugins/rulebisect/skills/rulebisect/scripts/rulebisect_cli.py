@@ -53,9 +53,9 @@ from pathlib import Path
 
 RUNTIME_MODULES = (
     '__init__.py', '__main__.py', 'assertions.py', 'checks.py', 'cli.py',
-    'comparison.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
+    'comparison.py', 'configuration.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
     'onboarding.py', 'report.py', 'report_ui.py', 'runner.py', 'setup.py',
-    'share.py', 'suite.py', 'ui.py',
+    'share.py', 'status.py', 'suite.py', 'ui.py',
 )
 
 
