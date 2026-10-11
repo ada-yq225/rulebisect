@@ -227,8 +227,17 @@ class ConfigurationIntegrationTests(unittest.TestCase):
                 code = main(arguments)
             self.assertEqual(code, 2)
             combined = stdout.getvalue() + stderr.getvalue()
-            self.assertIn('nested too deeply', combined)
-            self.assertIn(str(path.resolve()), combined)
+            if arguments[0] == 'doctor':
+                result = json.loads(stdout.getvalue())
+                failure = next(check for check in result['checks'] if check['name'] == 'Experiment inputs')
+                self.assertFalse(result['ok'])
+                self.assertFalse(failure['ok'])
+                self.assertEqual(stderr.getvalue(), '')
+                detail = failure['detail']
+            else:
+                detail = stderr.getvalue()
+            self.assertIn('nested too deeply', detail)
+            self.assertIn(str(path.resolve()), detail)
             self.assertNotIn('Traceback', combined)
             self.assertEqual(self.snapshot(), before)
         output = self.root / 'draft'

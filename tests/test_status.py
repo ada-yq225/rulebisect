@@ -107,7 +107,7 @@ class StatusTests(unittest.TestCase):
         (saved / 'report.json').write_text(json.dumps(report), encoding='utf-8')
         code, output, errors = self.cli('status', '--repo', str(self.repo))
         self.assertEqual(code, 0, errors)
-        self.assertIn(str(saved), output)
+        self.assertIn(str(saved.resolve()), output)
         self.assertIn('older snapshot', output)
         self.assertIn('does not validate current inputs', output)
         self.assertIn('rulebisect check --all', output)

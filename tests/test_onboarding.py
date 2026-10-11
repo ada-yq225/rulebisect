@@ -252,9 +252,14 @@ class OnboardingTests(unittest.TestCase):
                          ['python -m unittest discover -s tests'])
 
     def test_framework_scan_read_budget_is_one_mibibyte(self):
-        padded = '#' + 'x' * (256 * 1024 - 2) + '\n'
+        padded = b'#' + b'x' * (256 * 1024 - 2) + b'\n'
+        self.assertEqual(len(padded), 256 * 1024)
+        tests = self.repo / 'tests'
+        tests.mkdir()
         for number in range(4):
-            self._write_test(padded, f'test_{number:02}.py')
+            path = tests / f'test_{number:02}.py'
+            path.write_bytes(padded)
+            self.assertEqual(path.stat().st_size, 256 * 1024)
         self._write_test('import pytest\ndef test_value():\n    assert True\n', 'test_04.py')
         with patch('rulebisect.onboarding.ast.parse', wraps=ast.parse) as parse:
             self.assertEqual(command_suggestions(self.repo), [])
