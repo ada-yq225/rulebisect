@@ -158,6 +158,46 @@ def ledger_html(report):
     return '<section class="section" id="ledger">' + heading + content + '</section>'
 
 
+def snapshot_inputs_html(report):
+    """Explain the saved file selection, without reading or linking source paths."""
+    inputs = report.get('snapshot_inputs')
+    if not isinstance(inputs, dict) or not isinstance(inputs.get('included_files'), list):
+        return ''  # Older reports did not record their complete file selection.
+
+    def names(key):
+        values = inputs.get(key, [])
+        return [value for value in values if isinstance(value, str)] if isinstance(values, list) else []
+
+    included, extra = names('included_files'), names('extra_files')
+    excluded = names('excluded_untracked')[:20]
+    count = inputs.get('excluded_untracked_count')
+    if type(count) is not int or count < 0:
+        count = len(excluded)
+    truncated = inputs.get('excluded_untracked_truncated') is True or count > len(excluded)
+    content = ('<details class="disclosure settings-disclosure" id="snapshot-files"><summary>' +
+               bilingual('Snapshot files', '快照文件') + '</summary><p>' +
+               bilingual(f'Included in the initial snapshot: {len(included)} files.',
+                         f'初始快照纳入 {len(included)} 个文件。') + '</p>')
+    for values, en, zh in ((included, 'Included files', '纳入文件'),
+                           (extra, 'Explicitly included local files', '显式纳入的本地文件')):
+        if values:
+            content += ('<details class="disclosure"><summary>' + bilingual(f'{en} ({len(values)})',
+                         f'{zh}（{len(values)}）') + '</summary><pre class="code-block">' +
+                        esc('\n'.join(values)) + '</pre></details>')
+    content += ('<p>' + bilingual(f'Excluded untracked files (not ignored by Git): {count}.',
+                                 f'未纳入的未跟踪文件（未被 Git 忽略）：{count} 个。') + '</p>')
+    if excluded:
+        content += '<pre class="code-block">' + esc('\n'.join(excluded)) + '</pre>'
+    if truncated:
+        content += ('<p class="section-note">' + bilingual(
+                    f'Showing {len(excluded)} of {count} excluded files; the preview is incomplete.',
+                    f'显示 {count} 个未纳入文件中的 {len(excluded)} 个，预览不完整。') + '</p>')
+    content += ('<p class="section-note">' + bilingual(
+                'This is the saved initial snapshot, not a scan of current files. The excluded preview follows Git ignore rules; it does not inventory ignored files. Include required local inputs explicitly before retrying.',
+                '这里记录的是初始快照，不是当前文件扫描；未纳入文件的预览遵循 Git 忽略规则，不逐项盘点被忽略的文件。重试前请显式纳入需要的本地输入。') + '</p></details>')
+    return content
+
+
 def diff_html(path):
     if path is None:
         return ''
@@ -285,7 +325,7 @@ def render_report(out, report, label, action):
     middle = comparison_html(out, report, trials) if kind == 'comparison' else checks_html(out, report) if checks else instructions_html(out, report) + ledger_html(report)
     experiment = {key: report.get(key) for key in ('task', 'requested_model', 'codex_version', 'snapshot_sha256', 'repeats', 'max_runs', 'max_tokens', 'timeout_seconds', 'protected_files', 'unit_mode', 'setup', 'cases')}
     facts = [('Runner / 执行来源', source), ('Model / 模型', model), ('Version / 版本', report.get('version', 'unknown')), ('Repeats / 重复次数', report.get('repeats')), ('Task / 任务', report.get('task', ''))]
-    settings = '<section class="section" id="settings">' + section_heading(bilingual('Settings & exports', '设置与导出'), bilingual('Original task, configuration and complete machine-readable evidence.', '原始任务、配置与完整的机器可读证据。'), 'file') + '<div class="panel"><details class="disclosure settings-disclosure"><summary>' + bilingual('Experiment configuration', '实验设置') + '</summary><dl class="fact-list">' + ''.join(f'<dt>{esc(key)}</dt><dd>{esc(value)}</dd>' for key, value in facts) + '</dl><details class="disclosure"><summary>' + bilingual('Complete configuration JSON', '完整设置 JSON') + '</summary><pre class="code-block">' + esc(json.dumps(experiment, ensure_ascii=False, indent=2)) + '</pre></details></details><details class="disclosure settings-disclosure"><summary>' + bilingual('Reported token breakdown', '已上报 Token 明细') + '</summary><pre class="code-block">' + esc(json.dumps(totals, indent=2)) + '</pre><p>' + bilingual('Input includes cached input. Missing usage is unknown, and token counts do not imply a currency cost.', '输入包含缓存输入。缺失用量表示未知，Token 数不能推算货币费用。') + '</p></details></div><div class="artifact-links">' + downloads
+    settings = '<section class="section" id="settings">' + section_heading(bilingual('Settings & exports', '设置与导出'), bilingual('Original task, configuration and complete machine-readable evidence.', '原始任务、配置与完整的机器可读证据。'), 'file') + '<div class="panel"><details class="disclosure settings-disclosure"><summary>' + bilingual('Experiment configuration', '实验设置') + '</summary><dl class="fact-list">' + ''.join(f'<dt>{esc(key)}</dt><dd>{esc(value)}</dd>' for key, value in facts) + '</dl><details class="disclosure"><summary>' + bilingual('Complete configuration JSON', '完整设置 JSON') + '</summary><pre class="code-block">' + esc(json.dumps(experiment, ensure_ascii=False, indent=2)) + '</pre></details></details>' + snapshot_inputs_html(report) + '<details class="disclosure settings-disclosure"><summary>' + bilingual('Reported token breakdown', '已上报 Token 明细') + '</summary><pre class="code-block">' + esc(json.dumps(totals, indent=2)) + '</pre><p>' + bilingual('Input includes cached input. Missing usage is unknown, and token counts do not imply a currency cost.', '输入包含缓存输入。缺失用量表示未知，Token 数不能推算货币费用。') + '</p></details></div><div class="artifact-links">' + downloads
     for filename, en, zh in [('check.log', 'Check log', '检查日志'), ('setup.log', 'Setup log', '环境日志')]:
         settings += artifact_link(out, filename, svg_icon('file') + bilingual(en, zh))
     settings += '</div></section>'

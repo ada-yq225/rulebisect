@@ -4,6 +4,8 @@
 
 Give RuleBisect a task and an executable result check. It shrinks reproducible instruction failures, tests proposed changes across tasks, and opens a local evidence workspace with the outcome and next step first.
 
+Preview the files each experiment will copy, explicitly include new source files, and use the same configuration when inspecting, drafting and comparing instructions.
+
 Permanently free · MIT licensed · Codex only · Local-first · No telemetry. Alpha software. **Real experiments use your installed Codex CLI, login and account quota or billing.** Setup, planning, verifier checks and deterministic demos make no model calls.
 
 [Try a demo](#see-what-it-does--no-codex-account-needed) · [Use the Codex Skill](#use-as-a-codex-skill) · [Start with your repository](docs/QUICKSTART.md) · [Read the evidence](docs/REPORTS.md) · [中文说明](README.zh-CN.md)
@@ -63,12 +65,12 @@ The first catches a proposed rule that fixes modern labels but breaks legacy lab
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.8.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.8.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.9.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.9.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.8.0/rulebisect-0.8.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.9.0/rulebisect-0.9.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -93,7 +95,7 @@ rulebisect check --all --open
 rulebisect run --model YOUR_CODEX_MODEL_ID --open
 ```
 
-The wizard collects your task, independent check, optional environment setup and model. At the check prompt, choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` for several checks, or your test command. Command suggestions require an explicit choice. It does not install dependencies or run checks/model calls. Review `instructions` and `protected_files` before a real run.
+The wizard collects your task, independent check, optional environment setup and model. At the check prompt, choose `:exists`, `:contains`, or `:json` for a guided output check, `@checks.json` for several checks, or your test command. Command suggestions require an explicit choice. It does not install dependencies or run checks/model calls. Review `instructions`, `include_files` and `protected_files` before a real run.
 
 Not sure what comes next? `rulebisect status` checks inputs offline and shows commands for the selected repository/config, case scope, saved budget and latest evidence. It makes no model calls and does not execute setup or tests. Saved evidence may describe an older snapshot. Running `rulebisect` alone shows the starting commands.
 
@@ -102,6 +104,22 @@ For an existing custom instruction or Skill file, keep the guided setup:
 ```sh
 rulebisect init --wizard --instructions rules.md
 ```
+
+### See what enters the snapshot
+
+Each fresh snapshot contains Git-tracked **current working files**, including uncommitted edits, plus the selected instructions, oracles, protected files and explicit `include_files`. `status` and `doctor` summarize these inputs and warn about nonignored untracked omissions. View the full `snapshot_inputs` inventory with `status --json`, `doctor --offline --json`, `plan --json` or `compare --plan`; JSON includes omission counts and a bounded filename preview.
+
+For an existing untracked source file, choose its exact repository-relative path:
+
+```sh
+rulebisect init --wizard --include labels.py src/new_helper.py
+rulebisect status
+rulebisect plan --json
+```
+
+`--include FILE ...` also works with direct `init` options and alongside `--instructions`. It saves `include_files` and leaves Git staging unchanged. Each entry must be an existing file inside the repository; directories and symlinks are rejected, with no recursive selection or glob expansion. For an existing configuration, add an array such as `"include_files": ["labels.py", "src/new_helper.py"]`.
+
+Included source files remain editable during the task. Use `protected_files` for acceptance tests or verifier dependencies that must remain unchanged. Review omissions before running checks or calling Codex. Non-UTF-8 names in the omitted-file preview use byte escapes for display; counts use the original names.
 
 ### Check output without writing a verifier
 
@@ -139,7 +157,7 @@ rulebisect run
 
 `init` discovers tracked `AGENTS.md` / `AGENTS.override.md` files, preferring an override in the same directory. Untracked root instructions are also considered. Skills and untracked nested instructions are opt-in with `--instructions`. It creates `.rulebisect.json` and a trusted Python check wrapper; common test filenames are automatically protected. Review both instruction and protection lists.
 
-`plan` validates configuration and the snapshot, showing scope and the execution cap. `check` runs only your verifier against a fresh initial copy. A behavior failure may be expected before the coding task is implemented; inspect `check.log` to distinguish it from test setup failures. Neither command calls Codex.
+`plan` validates configuration and the snapshot, showing its file inventory, scope and execution cap. `check` runs only your verifier against a fresh initial copy. A behavior failure may be expected before the coding task is implemented; inspect `check.log` to distinguish it from test setup failures. Neither command calls Codex.
 
 `run` uses the saved model and options. Evidence goes into a new `.rulebisect-runs/<repo-name>/...` directory beside your repository, unless `--out` selects a different empty directory outside it.
 
@@ -167,11 +185,11 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 
 | Command | Purpose | Model calls |
 |---|---|---|
-| `status` | Show offline input readiness, saved scope/budget and exact next steps | No |
+| `status` | Show snapshot inputs, offline readiness, saved scope/budget and next steps | No |
 | `doctor` | Check Python, Git, Codex version, login and setup | No |
 | `init --wizard` / `init` | Generate configuration and an independent check wrapper | No |
 | `inspect` | Show instruction units with original file/line references | No |
-| `plan` | Validate inputs and preview scope/budget | No |
+| `plan` | Preview snapshot inputs, scope and budget | No |
 | `check` / `check --all` | Check one verifier or every suite case on initial snapshots | No |
 | `case add/list/remove` | Manage regression cases without editing JSON | No |
 | `run` | Run baseline, reduction and fresh confirmation | Yes |
@@ -225,6 +243,16 @@ rulebisect draft --out ../proposed-rules
 rulebisect compare --proposed ../proposed-rules --plan
 rulebisect compare --proposed ../proposed-rules --open
 ```
+
+`inspect` and `draft` use the instruction selection in `.rulebisect.json` when it exists. For a custom configuration, keep that selection consistent through the workflow:
+
+```sh
+rulebisect inspect --config experiment.json
+rulebisect draft --config experiment.json --out ../proposed-rules
+rulebisect compare --config experiment.json --proposed ../proposed-rules --plan
+```
+
+Positional files select exactly what `inspect` reads, for example `rulebisect inspect rules.md skills/review/SKILL.md`.
 
 For a quick selected comparison:
 
@@ -288,6 +316,7 @@ Example configuration:
 {
   "task": "Implement normalize_label in labels.py following repository conventions.",
   "instructions": ["AGENTS.md"],
+  "include_files": ["labels.py"],
   "oracle": "verify_behavior.py",
   "verify": ["{python}", "{oracle}"],
   "protected_files": ["tests/test_labels.py", "verify_behavior.py"],
@@ -303,7 +332,7 @@ Example configuration:
 
 ## What the reducer establishes
 
-1. Hash and copy tracked **current working-tree contents**, including uncommitted edits, plus explicitly selected instruction/verifier/protected files.
+1. Hash and copy tracked **current working-tree contents**, including uncommitted edits, plus selected instruction/verifier/protected files and explicit `include_files`.
 2. Require every full-instruction baseline repetition to fail and every empty-instruction control to pass.
 3. Use delta debugging to shrink the failing subset, reusing stable search evaluations.
 4. Run the candidate and each single-removal control **afresh**. Only then label it `observed_1_minimal`.
@@ -346,7 +375,7 @@ Source changes survive workspace cleanup as `changes.diff`: edits, deletions and
 
 ## Local execution boundaries
 
-The source repository is never modified by experiments. `init` intentionally adds configuration and, when using `--check` or `--assertions`, a verifier wrapper. Other untracked/ignored files, installed dependencies and Git history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
+The source repository is never modified by experiments. `init` intentionally adds configuration and, when using `--check` or `--assertions`, a verifier wrapper. Unselected untracked/ignored files, installed dependencies and the source Git index/history are not copied. Symlinks/submodules are unsupported. Prefer small, self-contained fixtures first.
 
 Copies are not containers or a security boundary. Codex runs with `workspace-write`, `approval_policy="never"`, `--ephemeral`, `--ignore-user-config`; verifier commands run with your local account. Use trusted repositories/checks only. Global instructions, project configuration, imports, network services and tool versions can affect behavior. POSIX timeouts terminate the process group; Windows currently terminates the direct process only. Full reports, diffs and logs may contain private code/output.
 

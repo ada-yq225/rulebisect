@@ -11,7 +11,7 @@ import stat
 import tomllib
 from pathlib import Path
 
-from .setup import CONFIG_NAME, _repository_file, discover_instructions, git_root, init_config
+from .setup import CONFIG_NAME, _repository_file, discover_instructions, git_root, init_config, validate_included_files
 from .assertions import validate_assertions
 
 
@@ -241,7 +241,7 @@ def _builtin_assertions(kind, input_fn):
 
 
 def run_wizard(repo: Path, input_fn=input, print_fn=print, *,
-               instructions: list[str] | None = None) -> Path:
+               instructions: list[str] | None = None, include_files: list[str] | None = None) -> Path:
     """Collect task/check details, then create config and a verifier wrapper.
 
     Every answer is collected and validated before init_config writes files.
@@ -261,11 +261,14 @@ def run_wizard(repo: Path, input_fn=input, print_fn=print, *,
     instructions = [_repository_file(repo, name, 'Instruction') for name in selected]
     if len(set(instructions)) != len(instructions):
         raise ValueError('Duplicate instruction files are unsupported')
+    included = validate_included_files(repo, include_files, instructions)
     wrapper = repo / '.rulebisect-verify.py'
     if wrapper.exists() or wrapper.is_symlink():
         raise ValueError('.rulebisect-verify.py already exists; use init --oracle to select your existing verifier.')
     print_fn('RuleBisect setup — no model calls, installations or test commands.')
     print_fn('Selected instruction files:\n' + '\n'.join(f'  {name}' for name in instructions))
+    if included:
+        print_fn('Additional snapshot files:\n' + '\n'.join(f'  {name}' for name in included))
     print_fn('Use one concrete task with an observable test result. A check exits 0 for pass, 1 for failure, 2+ for setup errors.')
     suggestions = command_suggestions(repo)
     try:
@@ -314,10 +317,12 @@ def run_wizard(repo: Path, input_fn=input, print_fn=print, *,
         print_fn(f'Task: {task}\nCheck: {check_label}\nSetup: {setup or "none"}\nModel: {model or "choose when running"}')
     except (EOFError, KeyboardInterrupt) as error:
         raise ValueError('Setup cancelled; no files written.') from error
-    path = init_config(repo, task, check, model, instructions=instructions, setup=setup, assertions=assertions)
+    path = init_config(repo, task, check, model, instructions=instructions, setup=setup,
+                       assertions=assertions, include_files=included)
     print_fn(f'Created {path}')
-    quoted_repo = shlex.quote(str(repo))
-    print_fn(f'Next: rulebisect doctor --offline --repo {quoted_repo}\nThen: rulebisect check --all --open --repo {quoted_repo}')
+    from .status import format_command
+    print_fn('Next: ' + format_command(['rulebisect', 'doctor', '--offline', '--repo', str(repo)]))
+    print_fn('Then: ' + format_command(['rulebisect', 'check', '--all', '--open', '--repo', str(repo)]))
     print_fn('Review protected_files and instructions in the config before running Codex.')
     if assertions is not None:
         print_fn('Assertions are frozen in the generated verifier; editing an input JSON does not change saved criteria.')

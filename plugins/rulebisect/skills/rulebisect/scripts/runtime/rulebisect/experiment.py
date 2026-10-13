@@ -6,7 +6,9 @@ import shutil
 import sys
 import difflib
 import subprocess
+import stat
 import tempfile
+import unicodedata
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -35,13 +37,13 @@ class Experiment:
                        "limitations": ["Finite repeated observations; no causal or statistical-confidence claim.",
                                        "1-minimal means no tested single removal preserves failure, not globally smallest.",
                                        "Only explicitly selected paragraph units are varied; external instructions remain fixed.",
-                                       "Snapshot is tracked working files; setup dependencies are recreated, not pinned. No Git history or security boundary."]}
+                                       "Snapshot is tracked working files plus explicitly selected instruction/verifier/protected/include files; setup dependencies are recreated, not pinned. No Git index/history or security boundary."]}
 
     def relative(self, value: str) -> str:
         if not isinstance(value, str) or not value:
             raise ValueError("File paths must be non-empty strings")
         path = Path(value)
-        if path.is_absolute() or ".." in path.parts or ".git" in path.parts:
+        if path.is_absolute() or ".." in path.parts or any(part.casefold() == ".git" for part in path.parts):
             raise ValueError(f"Expected a repository-relative path: {value}")
         if any((self.repo / Path(*path.parts[:i])).is_symlink() for i in range(1, len(path.parts) + 1)) or not (self.repo / path).resolve().is_relative_to(self.repo):
             raise ValueError(f"Symlinks and paths outside the repository are unsupported: {value}")
@@ -87,6 +89,25 @@ class Experiment:
             raise ValueError("Duplicate instruction files are unsupported")
         if set(instruction_paths) & (set(self.protected) | {oracle}):
             raise ValueError("Instruction files cannot also be verifier/protected files")
+        include_files = self.config.get('include_files', [])
+        if not isinstance(include_files, list):
+            raise ValueError('include_files must be a list of exact repository-relative file paths')
+        included, seen_includes = [], set()
+        from .setup import _repository_file
+        for value in include_files:
+            try:
+                name = self.relative(value)
+            except ValueError as error:
+                raise ValueError(f'Invalid include_files entry {value!r}: {error}') from error
+            portable_name = unicodedata.normalize('NFC', name).casefold()
+            if portable_name in seen_includes:
+                raise ValueError(f'Duplicate include_files path: {name}. List each file once using its exact path.')
+            seen_includes.add(portable_name)
+            path = self.repo / name
+            if path.exists() and (not path.is_file() or not stat.S_ISREG(path.stat().st_mode)):
+                raise ValueError(f'include_files file is missing or not a regular file: {name}. Select an existing exact file path; directories and glob patterns are not expanded.')
+            name = _repository_file(self.repo, name, 'include_files', exact_case=True)
+            included.append(name)
         root = subprocess.run(["git", "-c", "core.fsmonitor=false", "rev-parse", "--show-toplevel"], cwd=self.repo,
                               capture_output=True, text=True, timeout=10, check=True).stdout.strip()
         if Path(root).resolve() != self.repo:
@@ -94,16 +115,72 @@ class Experiment:
         tracked = subprocess.run(["git", "-c", "core.fsmonitor=false", "ls-files", "-z"], cwd=self.repo, capture_output=True,
                                  timeout=10, check=True).stdout.decode().split("\0")
         names = set(v for v in tracked if v) | set(instruction_paths) | {oracle} | set(self.protected)
+        folded_names = {unicodedata.normalize('NFC', name).casefold(): name for name in sorted(names)}
+        for name in included:
+            portable_name = unicodedata.normalize('NFC', name).casefold()
+            if name not in names and portable_name in folded_names:
+                raise ValueError(f'include_files path {name} differs only by case or Unicode normalization from snapshot file {folded_names[portable_name]}. Use that exact stored path.')
+        names.update(included)
         for name in sorted(names):
             name = self.relative(name)
             path = self.repo / name
             if path.is_dir():
                 raise ValueError(f"Submodules/directories are unsupported: {name}")
             if not path.exists():
+                if name in included:
+                    raise ValueError(f'include_files file disappeared while preparing: {name}. Restore it or remove that entry from include_files and retry.')
                 if name in instruction_paths or name == oracle or name in self.protected:
                     raise ValueError(f"Required file is missing: {name}")
                 continue  # tracked working-tree deletions are part of the snapshot
             self.blobs[name] = (path.read_bytes(), path.stat().st_mode & 0o777)
+        untracked = subprocess.run(['git', '-c', 'core.fsmonitor=false', 'ls-files', '--others', '--exclude-standard', '-z'],
+                                   cwd=self.repo, capture_output=True, timeout=10, check=True).stdout
+        # Omitted names are diagnostic only. Preserve byte identity for filtering
+        # and counting; distinct POSIX filenames may have the same escaped display.
+        copied_names = {name.encode('utf-8') for name in self.blobs}
+        excluded = sorted({name for name in untracked.split(b'\0') if name} - copied_names)
+        # Git may precompose Unicode names while a normalization-insensitive
+        # filesystem accepts another spelling. Compare actual directory entries
+        # only for those aliases; distinct Linux entries (even hardlinks) stay distinct.
+        normalized_copies = {}
+        for name in self.blobs:
+            normalized_copies.setdefault(unicodedata.normalize('NFC', name), []).append(name)
+        stored_names = {}
+        def stored_name(name):
+            if name in stored_names:
+                return stored_names[name]
+            parent, parts = self.repo, []
+            try:
+                for part in Path(name).parts:
+                    entries = [entry.name for entry in parent.iterdir()]
+                    entry = part if part in entries else next((value for value in entries
+                        if unicodedata.normalize('NFC', value) == unicodedata.normalize('NFC', part)
+                        and (parent / value).samefile(parent / part)), None)
+                    if entry is None:
+                        return None
+                    parts.append(entry)
+                    parent = parent / entry
+                result = tuple(parts)
+            except OSError:
+                result = None
+            stored_names[name] = result
+            return result
+        def copied_unicode_alias(raw_name):
+            try:
+                name = raw_name.decode('utf-8')
+            except UnicodeDecodeError:
+                return False
+            matches = normalized_copies.get(unicodedata.normalize('NFC', name), [])
+            if not matches:
+                return False
+            actual = stored_name(name)
+            return actual is not None and any(stored_name(value) == actual for value in matches)
+        excluded = [name for name in excluded if not copied_unicode_alias(name)]
+        self.report['snapshot_inputs'] = {'included_files': sorted(self.blobs), 'extra_files': sorted(included),
+                                          'excluded_untracked': [name.decode('utf-8', errors='backslashreplace')
+                                                                 for name in excluded[:20]],
+                                          'excluded_untracked_count': len(excluded),
+                                          'excluded_untracked_truncated': len(excluded) > 20}
         self.report["source_snapshot_sha256"] = digest(json.dumps({"files": {name: digest(data) for name, (data, _) in self.blobs.items()}, "modes": {name: mode for name, (_, mode) in self.blobs.items()}}, sort_keys=True).encode())
         for name, data in (instruction_overrides or {}).items():
             if name not in instruction_paths or not isinstance(data, bytes):

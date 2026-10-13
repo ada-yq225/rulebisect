@@ -8,7 +8,7 @@
 
 [先看演示](#先看效果无需-codex-账户) · [使用 Codex Skill](#作为-codex-skill-使用) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
 
-不知道下一步怎么做时，在目标仓库运行 `rulebisect status`。它会离线检查配置，列出案例、预算、最近证据和可复制的下一步命令，不运行准备命令、测试或 Codex。直接运行 `rulebisect` 也会显示上手入口。旧报告只代表保存时的快照，不代表当前配置或行为已通过验证。
+不知道下一步怎么做时，在目标仓库运行 `rulebisect status`。它会离线检查配置，展示快照文件数量、遗漏提醒、案例、预算和下一步命令，不运行准备命令、测试或 Codex。新写的源码可显式加入快照，保留 Git 暂存状态。直接运行 `rulebisect` 也会显示上手入口。旧报告只代表保存时的快照。
 
 已有自定义规则文件或 Skill 时，可使用 `rulebisect init --wizard --instructions rules.md` 继续向导。配置 JSON 出错会标明实际文件路径和行列，方便直接修正。
 
@@ -71,12 +71,12 @@ rulebisect demo --scenario fix --open
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.8.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.8.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.9.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.9.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.8.0/rulebisect-0.8.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.9.0/rulebisect-0.9.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -100,7 +100,23 @@ rulebisect check --all --open
 rulebisect run --model 你可用的Codex模型ID --open
 ```
 
-向导收集具体任务、独立检查、可选的环境准备命令和模型。检查步骤可以输入 `:exists`、`:contains` 或 `:json`，按提示选择文件、文本或 JSON 验收条件；多个条件用 `@checks.json`，已有测试则填检查命令。建议命令需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的指令与保护文件。
+向导收集具体任务、独立检查、可选的环境准备命令和模型。检查步骤可以输入 `:exists`、`:contains` 或 `:json`，按提示选择文件、文本或 JSON 验收条件；多个条件用 `@checks.json`，已有测试则填检查命令。建议命令需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的 `instructions`、`include_files` 和 `protected_files`。
+
+### 先看清快照里有哪些文件
+
+每个初始快照包含 Git 已跟踪文件的**当前工作内容**（包括未提交修改），以及选中的指令、验证器、保护文件和 `include_files`。`status`、`doctor` 显示快照概要，并提醒未纳入且未被 Git 忽略的未跟踪文件。完整 `snapshot_inputs` 清单可通过 `status --json`、`doctor --offline --json`、`plan --json` 或 `compare --plan` 查看；JSON 包含遗漏数量和有限的文件名预览。
+
+已有未跟踪源码时，填写准确的仓库相对路径：
+
+```sh
+rulebisect init --wizard --include labels.py src/new_helper.py
+rulebisect status
+rulebisect plan --json
+```
+
+直接配置的 `init` 同样支持 `--include 文件 ...`，也可与 `--instructions` 合用。所选文件保存到 `include_files`，不会自动暂存。每项必须是仓库内已存在的普通文件；目录和符号链接会被拒绝，不递归选择，也不展开通配符。已有配置可添加 `"include_files": ["labels.py", "src/new_helper.py"]`。
+
+加入快照的源码仍可由任务修改。需要保持不变的验收测试或验证器依赖，应放入 `protected_files`。先检查遗漏，再运行验证器或调用 Codex。遗漏预览中的非 UTF-8 文件名会用字节转义显示；数量按原始名称统计。
 
 ### 不写验证脚本，也能检查结果
 
@@ -138,7 +154,7 @@ rulebisect run
 
 `init` 自动发现已跟踪的 `AGENTS.md` 和 `AGENTS.override.md`，同目录存在 override 时优先选它；自动生成配置与验证器包装脚本，并把常见命名的测试文件加入保护列表。请检查这些选择是否符合你的任务。未跟踪的根目录指令也会纳入；未跟踪的嵌套指令、Skill 请用 `--instructions` 显式指定。
 
-`plan` 检查快照和配置、显示指令数量与运行上限；`check` 在初始仓库副本里运行验证器。**这两个命令不调用模型。** 初始代码尚未实现时，验证失败可以是预期结果；先查看 `check.log` 确认不是依赖或测试配置错误。
+`plan` 检查快照和配置，显示文件清单、指令数量与运行上限；`check` 在初始仓库副本里运行验证器。**这两个命令不调用模型。** 初始代码尚未实现时，验证失败可以是预期结果；先查看 `check.log` 确认不是依赖或测试配置错误。
 
 `run` 每次从同一份初始快照开始，输出证据目录，默认放在仓库旁的 `.rulebisect-runs` 里，不会修改原仓库。模型与默认选项保存在 `.rulebisect.json`，之后通常只需 `rulebisect run`。
 
@@ -189,10 +205,11 @@ rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
 
 | 命令 / 选项 | 用途 | 调用模型 |
 |---|---|---|
+| `status` | 查看快照输入、离线就绪、案例、预算与下一步 | 否 |
 | `doctor` | 检查 Python、Git、Codex 版本、登录和配置 | 否 |
 | `init --wizard` / `init` | 自动生成配置和可信验证器包装脚本 | 否 |
 | `inspect` | 阅读拆分后的指令及源文件行号 | 否 |
-| `plan` | 检查配置、快照和运行预算 | 否 |
+| `plan` | 预览快照文件、实验范围和运行预算 | 否 |
 | `check` / `check --all` | 检查单个或全部验证器环境 | 否 |
 | `case add/list/remove` | 无需编辑 JSON 管理回归用例 | 否 |
 | `run` | 重复运行、删减指令、重新确认 | 是 |
@@ -257,6 +274,16 @@ rulebisect compare --proposed ../proposed-rules --plan
 rulebisect compare --proposed ../proposed-rules --open
 ```
 
+有 `.rulebisect.json` 时，`inspect` 和 `draft` 使用其中选定的指令。自定义配置应在查看、准备草案和对照时保持一致：
+
+```sh
+rulebisect inspect --config experiment.json
+rulebisect draft --config experiment.json --out ../proposed-rules
+rulebisect compare --config experiment.json --proposed ../proposed-rules --plan
+```
+
+`inspect` 的位置参数会明确选择文件，例如 `rulebisect inspect rules.md skills/review/SKILL.md`。
+
 单任务无需额外配置，直接复用 `init` 保存的任务和验证器。要保护其他任务，在同一配置中加入：
 
 ```json
@@ -312,7 +339,7 @@ rulebisect init --task "明确的任务" --oracle verify_behavior.py --model 模
 
 这是有限次数的观察，不保证全局最小、不证明语义冲突或因果关系、不声称统计显著。遇到波动或执行异常会停止。默认按段落拆分；删除标题可能改变文档结构，必要时先用 `section` / `file` 模式。工具不确认每个片段是否实际加载，不复现全部外部上下文。
 
-快照包含已跟踪文件的当前内容（包括未提交修改），以及显式指定的指令、验证器和保护文件。其他未跟踪/忽略文件、Git 历史、安装的依赖不复制；暂不支持符号链接、子模块。仓库副本不是容器或安全边界，仅运行可信仓库和验证命令。原始日志、代码差异和完整报告可能含私有代码，分享前检查。
+快照包含已跟踪文件的当前内容（包括未提交修改），以及显式指定的指令、验证器、保护文件和 `include_files`。未选中的未跟踪/忽略文件、源 Git 索引与历史、原目录中安装的依赖不复制；暂不支持符号链接、子模块。仓库副本不是容器或安全边界，仅运行可信仓库和验证命令。原始日志、代码差异和完整报告可能含私有代码，分享前检查。
 
 本轮功能选择依据和公开需求来源：[需求记录](docs/DEMAND.md)、[创新性与竞品核对](docs/INNOVATION.md)。
 

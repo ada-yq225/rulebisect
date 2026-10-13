@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -38,7 +39,7 @@ def discover_instructions(repo: Path) -> list[str]:
                   or str(Path(name).with_name('AGENTS.override.md')) not in candidates)
 
 
-def _repository_file(repo: Path, name: str, label: str) -> str:
+def _repository_file(repo: Path, name: str, label: str, *, exact_case: bool = False) -> str:
     """Match experiment path restrictions before initialization creates any files."""
     if not isinstance(name, str) or not name:
         raise ValueError(f'{label} requires a nonempty repository-relative file path')
@@ -49,6 +50,30 @@ def _repository_file(repo: Path, name: str, label: str) -> str:
     if any((repo / Path(*relative.parts[:index])).is_symlink()
            for index in range(1, len(relative.parts) + 1)):
         raise ValueError(f'{label} files and their parent directories must not be symlinks: {name}')
+    if exact_case:
+        parent, actual_parts, mismatched = repo, [], False
+        for part in relative.parts:
+            try:
+                entries = [entry.name for entry in parent.iterdir()]
+            except OSError as error:
+                raise ValueError(f'{label} file is missing or its parent is unreadable: {name}. Select an existing exact file path and check directory permissions.') from error
+            normalized = unicodedata.normalize('NFC', part)
+            exact = next((entry for entry in entries if entry == part), None)
+            if exact is None:
+                exact = next((entry for entry in entries if unicodedata.normalize('NFC', entry) == normalized), None)
+            if exact is None:
+                suggestions = sorted(entry for entry in entries
+                                     if unicodedata.normalize('NFC', entry).casefold() == normalized.casefold())
+                if not suggestions:
+                    raise ValueError(f'{label} file is missing: {name}. Select an existing exact repository-relative file path.')
+                exact, mismatched = suggestions[0], True
+            actual_parts.append(exact)
+            parent = parent / exact
+            if parent.is_symlink():
+                raise ValueError(f'{label} files and their parent directories must not be symlinks: {name}')
+        if mismatched:
+            suggestion = Path(*actual_parts).as_posix()
+            raise ValueError(f'{label} path uses incorrect casing: {name}. Use {suggestion!r}.')
     if not target.is_file() or not target.resolve().is_relative_to(repo):
         raise ValueError(f'{label} file is missing or outside the repository: {name}')
     return relative.as_posix()
@@ -56,7 +81,7 @@ def _repository_file(repo: Path, name: str, label: str) -> str:
 
 def init_config(repo: Path, task: str, check: str | None, model: str | None,
                 oracle: str | None = None, instructions: list[str] | None = None, setup: str | None = None,
-                assertions: list[dict] | None = None) -> Path:
+                assertions: list[dict] | None = None, include_files: list[str] | None = None) -> Path:
     repo = repo.resolve()
     path = repo / CONFIG_NAME
     if path.exists() or path.is_symlink():
@@ -76,6 +101,7 @@ def init_config(repo: Path, task: str, check: str | None, model: str | None,
     selected = [_repository_file(repo, name, 'Instruction') for name in selected]
     if len(set(selected)) != len(selected):
         raise ValueError('Duplicate instruction files are unsupported')
+    included = validate_included_files(repo, include_files, selected + ([oracle] if isinstance(oracle, str) else []))
     names = tracked_files(repo)
     protected = [name for name in names if (Path(name).name.startswith(('test_', 'test.'))
                   or Path(name).name.endswith(('_test.py', '.test.ts', '.test.js', '.spec.ts', '.spec.js')))
@@ -120,6 +146,8 @@ sys.exit(result.returncode if result.returncode in (0, 1) else 2)
         config['setup'] = setup_argv
     if model:
         config['model'] = model
+    if included:
+        config['include_files'] = included
     encoded = json.dumps(config, ensure_ascii=False, indent=2) + '\n'
     created = []
     try:
@@ -138,6 +166,36 @@ sys.exit(result.returncode if result.returncode in (0, 1) else 2)
     return path
 
 
+def validate_included_files(repo: Path, values: list[str] | None, selected: list[str] | None = None) -> list[str]:
+    """Validate explicit baseline files before prompts or initialization writes."""
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        raise ValueError('include_files must be a list of repository-relative file paths')
+    included = [_repository_file(repo, name, 'Included snapshot', exact_case=True) for name in values]
+    if len({unicodedata.normalize('NFC', name).casefold() for name in included}) != len(included):
+        raise ValueError('Duplicate included snapshot files are unsupported')
+    known = (set(tracked_files(repo)) | set(selected or [])) if included else set()
+    folded = {unicodedata.normalize('NFC', name).casefold(): name for name in sorted(known)}
+    for name in included:
+        portable_name = unicodedata.normalize('NFC', name).casefold()
+        if name not in known and portable_name in folded:
+            raise ValueError(f'Included snapshot file {name} differs only by case or Unicode normalization from {folded[portable_name]}; use that exact path.')
+    return included
+
+
+def snapshot_warnings(inputs: dict) -> list[str]:
+    """Explain omitted inputs without guessing which files the task needs."""
+    count = inputs.get('excluded_untracked_count', 0)
+    if not count:
+        return []
+    names = ', '.join(repr(name) for name in inputs.get('excluded_untracked', []))
+    suffix = ' (first 20 shown)' if inputs.get('excluded_untracked_truncated') else ''
+    return [f'{count} nonignored untracked files are outside the snapshot{suffix}: {names}. '
+            'If a task needs one, add its exact repository-relative path to include_files in the config. '
+            'Configuration files do not need inclusion. Git staging is unchanged.']
+
+
 def validate_configuration(repo: Path, config_path: Path, proposed: Path | None = None) -> dict:
     """Reuse experiment validation without executing setup, verifier, or model commands."""
     from .comparison import Comparison, suite_cases
@@ -152,7 +210,15 @@ def validate_configuration(repo: Path, config_path: Path, proposed: Path | None 
                                 max_tokens=config.get('max_tokens'))
         scope = comparison.prepare(check_codex=False)
     else:
-        cases = suite_cases(config)
+        from .comparison import select_cases
+        # Keep an invalid case's name in the diagnostic before creating the
+        # shared verifier union used by actual suite checks/comparisons.
+        for name, case in suite_cases(config):
+            try:
+                _repository_file(repo, case.get('oracle'), 'Oracle')
+            except ValueError as error:
+                raise ValueError(f'Case {name}: {error}') from error
+        cases = suite_cases(select_cases(config))
         for name, case in cases:
             experiment = Experiment(repo, case, out, *settings,
                                     max_tokens=config.get('max_tokens'))
@@ -162,6 +228,7 @@ def validate_configuration(repo: Path, config_path: Path, proposed: Path | None 
                 raise ValueError(f'Case {name}: {error}') from error
         scope = {'instruction_files': experiment.instruction_paths, 'units': len(experiment.rules),
                  'snapshot_files': len(experiment.blobs), 'cases': [name for name, _ in cases],
+                 'snapshot_inputs': experiment.report['snapshot_inputs'],
                  'comparison_calls': len(cases) * 2 * experiment.repeats,
                  'max_runs': experiment.max_runs, 'model_calls': 0}
     return scope
@@ -183,6 +250,7 @@ def doctor(repo: Path, *, offline: bool = False, config_path: Path | None = None
             try:
                 scope = validate_configuration(root, config, proposed)
                 add('Experiment inputs', True, 'Snapshot, instruction files, verifier roles and budgets validated')
+                warnings.extend(snapshot_warnings(scope.get('snapshot_inputs', {})))
                 configured = load_configuration(config)
                 if not configured.get('model'):
                     warnings.append('No saved model; choose --model MODEL when running.')
@@ -227,13 +295,18 @@ def doctor(repo: Path, *, offline: bool = False, config_path: Path | None = None
             'executed_setup': False, 'executed_verifier': False}
 
 
-def draft_instructions(repo: Path, out: Path) -> Path:
-    """Create an editable instruction copy without changing the experiment baseline."""
+def draft_instructions(repo: Path, out: Path, config_path: Path | None = None) -> Path:
+    """Copy selected instructions, using an explicit config without fallback.
+
+    Relative configuration paths follow the caller's working directory, as in
+    check/compare. Automatic discovery is used only when no configuration was
+    supplied and the repository has no default config.
+    """
     repo, out = repo.resolve(), out.resolve()
     if out.is_relative_to(repo) or (out.exists() and any(out.iterdir())):
         raise ValueError('Draft output must be an empty directory outside the repository')
-    path = repo / CONFIG_NAME
-    if path.exists() or path.is_symlink():
+    path = Path(config_path) if config_path is not None else repo / CONFIG_NAME
+    if config_path is not None or path.exists() or path.is_symlink():
         config = load_configuration(path)
         selected = config.get('instructions')
     else:
@@ -242,10 +315,10 @@ def draft_instructions(repo: Path, out: Path) -> Path:
         raise ValueError('Select instruction files with init first')
     files = {}
     for name in selected:
-        relative = Path(name)
-        target = repo / relative
-        if relative.is_absolute() or '..' in relative.parts or '.git' in relative.parts or any((repo / Path(*relative.parts[:i])).is_symlink() for i in range(1, len(relative.parts) + 1)) or not target.is_file():
-            raise ValueError(f'Instruction file missing, unsafe or symlinked: {name}')
+        name = _repository_file(repo, name, 'Instruction')
+        if name in files:
+            raise ValueError('Duplicate instruction files are unsupported')
+        target = repo / name
         files[name] = (target.read_bytes(), target.stat().st_mode & 0o777)
     for name, (content, mode) in files.items():
         target = out / name

@@ -140,6 +140,7 @@ class Comparison:
                 'instruction_files': first.instruction_paths, 'required_calls': required,
                 'max_runs': self.max_runs, 'max_tokens': self.max_tokens, 'model': self.model,
                 'snapshot_sha256': first.report['snapshot_sha256'], 'candidate_snapshot_sha256': candidate_hash,
+                'snapshot_inputs': first.report['snapshot_inputs'],
                 'setup': self.config.get('setup', []), 'output': str(self.out), 'model_calls': 0,
                 'case_selection': self.report['case_selection']}
 

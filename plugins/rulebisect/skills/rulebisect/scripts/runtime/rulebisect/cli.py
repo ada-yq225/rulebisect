@@ -22,7 +22,7 @@ from .core import split_rules
 from .demo import run_demo, run_comparison_demo
 from .experiment import Experiment
 from .report import write_report
-from .setup import CONFIG_NAME, discover_instructions, doctor, draft_instructions, git_root, init_config
+from .setup import CONFIG_NAME, _repository_file, discover_instructions, doctor, draft_instructions, git_root, init_config, snapshot_warnings
 
 
 def default_output(repo: Path, purpose='run') -> Path:
@@ -101,9 +101,10 @@ def main(argv=None) -> int:
     init.add_argument('--setup', help='Quoted environment command executed before every trial, e.g. "npm ci"')
     verifier = init.add_mutually_exclusive_group()
     verifier.add_argument('--check', help='Quoted command, e.g. "python -m unittest discover -s tests"; no shell expansion')
-    verifier.add_argument('--oracle', help='Existing repository-relative Python verifier (exit 0/1/2+)')
+    verifier.add_argument('--oracle', help='Existing standalone repository-relative Python verifier (exit 0/1/2+); use --check for project imports')
     verifier.add_argument('--assertions', type=Path, help='JSON output checks; compile an independent verifier without writing Python')
     init.add_argument('--instructions', nargs='+', help='Override automatic AGENTS.md selection; Skills are opt-in')
+    init.add_argument('--include', nargs='+', metavar='FILE', help='Include exact repository-relative baseline files without Git staging; no directory recursion or glob expansion')
     doc = commands.add_parser('doctor', help='Check Python, Git, Codex and login without model calls')
     doc.add_argument('--repo', type=Path, default=Path.cwd())
     doc.add_argument('--json', action='store_true')
@@ -117,7 +118,8 @@ def main(argv=None) -> int:
     inspect = commands.add_parser('inspect', help='Inspect the instruction units; no model calls')
     inspect.add_argument('files', nargs='*', type=Path)
     inspect.add_argument('--repo', type=Path, default=Path.cwd())
-    inspect.add_argument('--unit-mode', choices=['paragraph', 'section', 'file'], default='paragraph')
+    inspect.add_argument('--config', type=Path, help='Inspect saved instruction selection; default: repository/.rulebisect.json if present')
+    inspect.add_argument('--unit-mode', choices=['paragraph', 'section', 'file'], help='Override saved mode; default: paragraph when no configuration is selected')
     inspect.add_argument('--json', action='store_true')
     plan = commands.add_parser('plan', help='Validate snapshot/config and preview experiment scope; no model calls')
     add_experiment_options(plan)
@@ -162,13 +164,14 @@ def main(argv=None) -> int:
             action.add_argument('--task', required=True)
             verification = action.add_mutually_exclusive_group(required=True)
             verification.add_argument('--check', help='Trusted command; saved but not executed')
-            verification.add_argument('--oracle', help='Existing repository-relative verifier')
+            verification.add_argument('--oracle', help='Existing standalone repository-relative verifier; use --check for project imports')
             verification.add_argument('--assertions', type=Path, help='JSON list of deterministic file/text/JSON checks')
     share = commands.add_parser('share', help='Export a standalone summary that excludes tasks, code, identifiers and logs')
     share.add_argument('path', type=Path, help='Saved evidence directory or report.json')
     share.add_argument('--out', type=Path, required=True, help='New HTML file outside the evidence directory; no upload')
     draft = commands.add_parser('draft', help='Copy selected instructions outside the repo for editing and comparison')
     draft.add_argument('--repo', type=Path, default=Path.cwd())
+    draft.add_argument('--config', type=Path, help='Use the same custom configuration as plan and compare')
     draft.add_argument('--out', type=Path, required=True)
     hist = commands.add_parser('history', help='List evidence in the default output directory; no model calls')
     hist.add_argument('--repo', type=Path, default=Path.cwd())
@@ -209,8 +212,11 @@ def main(argv=None) -> int:
             return 0
         if args.command == 'draft':
             repo = git_root(args.repo)
-            result = draft_instructions(repo, args.out)
-            print(f'Edit instructions in: {result}\nThen: rulebisect compare --repo "{repo}" --proposed "{result}" --plan\nOriginal instructions preserved; no model calls.')
+            result = draft_instructions(repo, args.out, config_path=args.config)
+            command = ['rulebisect', 'compare', '--repo', str(repo), '--proposed', str(result), '--plan']
+            if args.config is not None:
+                command += ['--config', str(args.config.absolute())]
+            print(f'Edit instructions in: {result}\nThen: {format_command(command)}\nOriginal instructions preserved; no model calls.')
             return 0
         if args.command == 'history':
             result = history(git_root(args.repo))
@@ -228,13 +234,13 @@ def main(argv=None) -> int:
             repo = git_root(args.repo)
             if args.wizard:
                 if any((args.task, args.check, args.oracle, args.assertions, args.model, args.setup)):
-                    raise ValueError('Use init --wizard --repo PATH [--instructions FILE ...], or provide explicit init options without --wizard')
-                run_wizard(repo, instructions=args.instructions)
+                    raise ValueError('Use init --wizard --repo PATH [--instructions FILE ...] [--include FILE ...], or provide explicit init options without --wizard')
+                run_wizard(repo, instructions=args.instructions, include_files=args.include)
                 return 0
             if not args.task or not (args.check or args.oracle or args.assertions):
                 raise ValueError('Use init --wizard, or provide --task and --check/--oracle/--assertions')
             path = init_config(repo, args.task, args.check, args.model, args.oracle, args.instructions, args.setup,
-                               assertions=load_assertions(args.assertions))
+                               assertions=load_assertions(args.assertions), include_files=args.include)
             print(f'Created {path}\nNext: {format_command(["rulebisect", "status", "--repo", str(repo)])}')
             if not args.model:
                 print('Choose --model MODEL when running, or add model to the config.')
@@ -258,12 +264,28 @@ def main(argv=None) -> int:
             return 0 if result['ok'] else 2
         if args.command == 'inspect':
             files = args.files
+            unit_mode = args.unit_mode or 'paragraph'
+            if files and args.config is not None:
+                raise ValueError('Choose explicit instruction files or --config, not both.')
             if not files:
                 repo = git_root(args.repo)
-                files = [repo / name for name in discover_instructions(repo)]
+                path = args.config or repo / CONFIG_NAME
+                if args.config is not None or path.exists() or path.is_symlink():
+                    config = load_configuration(path)
+                    if args.unit_mode is None:
+                        unit_mode = config.get('unit_mode', 'paragraph')
+                    names = config.get('instructions')
+                    if not isinstance(names, list) or not names:
+                        raise ValueError('Config requires an explicit instructions list')
+                    names = [_repository_file(repo, name, 'Instruction') for name in names]
+                    if len(set(names)) != len(names):
+                        raise ValueError('Duplicate instruction files are unsupported')
+                else:
+                    names = discover_instructions(repo)
+                files = [repo / name for name in names]
             units = []
             for path in files:
-                units.extend(split_rules(str(path), path.read_bytes().decode('utf-8'), len(units), args.unit_mode))
+                units.extend(split_rules(str(path), path.read_bytes().decode('utf-8'), len(units), unit_mode))
             if not units:
                 raise ValueError('No units found; specify instruction files explicitly.')
             if args.json:
@@ -302,12 +324,15 @@ def main(argv=None) -> int:
                 result = {'model': experiment.model, 'instruction_files': experiment.instruction_paths,
                           'units': n, 'unit_mode': experiment.report['unit_mode'], 'snapshot_files': len(experiment.blobs),
                           'snapshot_bytes': sum(len(v[0]) for v in experiment.blobs.values()),
+                          'snapshot_inputs': experiment.report['snapshot_inputs'],
                           'protected_files': experiment.protected, 'setup': experiment.config.get('setup', []), 'repeats': experiment.repeats,
                           'minimum_baseline_calls': 2 * experiment.repeats, 'max_runs': experiment.max_runs,
                           'confirmation_calls_if_all_units_retained': (n + 1) * experiment.repeats,
                           'max_tokens': experiment.max_tokens, 'output': str(out), 'model_calls': 0}
                 print(json.dumps(result, ensure_ascii=False, indent=2))
                 if not args.json:
+                    for warning in snapshot_warnings(result['snapshot_inputs']):
+                        print(f'NOTE  {warning}')
                     print('No model calls. Actual runs depend on results; the run cap may stop before confirmation.')
                 return 0
             if args.command == 'check':
@@ -317,6 +342,8 @@ def main(argv=None) -> int:
                     config = dict(experiment.config, model=experiment.model, repeats=experiment.repeats,
                                   max_runs=experiment.max_runs, timeout=experiment.timeout, max_tokens=experiment.max_tokens)
                     report = SuiteCheck(experiment.repo, config, out).execute()
+                    for warning in snapshot_warnings(report.get('snapshot_inputs', {})):
+                        print(f'NOTE  {warning}')
                     counts = {outcome: sum(case['outcome'] == outcome for case in report['cases'])
                               for outcome in ('pass', 'fail', 'error', 'pending')}
                     print(f"Checks: {counts['pass']} passed, {counts['fail']} behavior failures, {counts['error']} execution errors, {counts['pending']} pending.")
@@ -333,6 +360,8 @@ def main(argv=None) -> int:
                         return 2
                     return 1 if args.require_pass and counts['fail'] else 0
                 result = experiment.check_initial()
+                for warning in snapshot_warnings(experiment.report.get('snapshot_inputs', {})):
+                    print(f'NOTE  {warning}')
                 code = result.get('exit_code')
                 outcome = 'passed' if code == 0 else 'behavior failure' if code == 1 else 'execution error'
                 print(f'Initial snapshot: {outcome} (exit {code}).')

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 / Skill and plugin 0.3.0 — Visible experiment inputs
+
+- Include exact baseline files with `init --include FILE ...`, including guided setup, or saved `include_files`; Git staging stays unchanged and source files remain editable in experiment copies.
+- Show included snapshot files and a bounded preview of omitted nonignored untracked files in status, doctor, planning and saved evidence. All suite oracles/protected files are reflected consistently in offline validation.
+- Carry custom configuration through `inspect --config` and `draft --config`. Inspection follows saved instruction selection and unit mode; draft suggestions retain the configuration path.
+- Validate explicit baseline files before prompts/writes, retain source hashes across suite checks/comparisons, and preserve aggregate-only sharing.
+
 ## 0.8.0 / Skill and plugin 0.2.0 — Clear next steps
 
 - Running `rulebisect` without arguments now offers a simulation, workspace status and guided setup, with no repository commands or model calls.
