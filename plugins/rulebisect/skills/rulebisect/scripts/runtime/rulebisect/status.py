@@ -87,6 +87,9 @@ def print_status(result: dict) -> None:
         print(f"Instructions: {', '.join(result['instructions'])}\nCases: {', '.join(result['cases'])}")
         print(f"Model: {result['model'] or 'choose --model when running'}; repeats: {budget['repeats']}; execution cap: {budget['max_runs']}")
         print(f"Full comparison: {budget['comparison_calls']} planned model calls; reduction uses a variable number of calls.")
+        snapshot = result['scope'].get('snapshot_inputs', {})
+        print(f"Snapshot: {len(snapshot.get('included_files', []))} files, "
+              f"{len(snapshot.get('extra_files', []))} explicitly included. See plan --json for the file list.")
     else:
         for value in result['checks']:
             if not value['ok']:

@@ -400,6 +400,84 @@ class ReportUiTests(unittest.TestCase):
         for name in ('agent.log', 'setup.log', 'verify.log', 'changes.diff', 'candidate.patch', 'proposed.patch'):
             self.assertFalse(any(value.endswith(name) for value in links), name)
 
+    def test_snapshot_files_disclosure_shows_saved_counts_and_bounded_preview(self):
+        included = ['AGENTS.md', 'verify.py', 'fixtures/local data.json']
+        excluded = [f'local/file-{index}.json' for index in range(20)]
+        document = self.render(self.report(snapshot_inputs={
+            'included_files': included, 'extra_files': ['fixtures/local data.json'],
+            'excluded_untracked': excluded, 'excluded_untracked_count': 27,
+            'excluded_untracked_truncated': True}))
+        disclosure = document.by_id('snapshot-files')
+        self.assertIsNotNone(disclosure)
+        self.assertEqual(disclosure.tag, 'details')
+        self.assertIn('settings-disclosure', disclosure.classes())
+        text = disclosure.text()
+        for phrase in ('Snapshot files', '快照文件', 'Included in the initial snapshot: 3 files.',
+                       'Explicitly included local files (1)', '显式纳入的本地文件（1）',
+                       'Excluded untracked files (not ignored by Git): 27.',
+                       'Showing 20 of 27 excluded files', '预览不完整',
+                       'does not inventory ignored files', 'not a scan of current files'):
+            self.assertIn(phrase, text)
+        for filename in included + excluded:
+            self.assertIn(filename, text)
+        self.assertFalse(list(disclosure.descendants('a')))
+        self.assert_semantics(document)
+        self.assert_local_resources(document)
+
+    def test_snapshot_files_zero_exclusions_does_not_claim_ignored_files_were_scanned(self):
+        document = self.render(self.report(snapshot_inputs={
+            'included_files': ['AGENTS.md', 'verify.py'], 'extra_files': [],
+            'excluded_untracked': [], 'excluded_untracked_count': 0,
+            'excluded_untracked_truncated': False}))
+        text = document.by_id('snapshot-files').text()
+        self.assertIn('Excluded untracked files (not ignored by Git): 0.', text)
+        self.assertIn('does not inventory ignored files', text)
+        self.assertNotIn('preview is incomplete', text)
+        self.assertNotIn('Explicitly included local files', text)
+
+    def test_snapshot_filenames_are_text_and_cannot_inject_markup_or_scripts(self):
+        hostile = ['</pre><script>alert("included")</script>',
+                   '<img src="https://example.invalid/private" onerror="alert(1)">',
+                   'javascript:alert("excluded")?query=private#fragment']
+        document = self.render(self.report(snapshot_inputs={
+            'included_files': [hostile[0], hostile[1]], 'extra_files': [hostile[1]],
+            'excluded_untracked': [hostile[2]], 'excluded_untracked_count': 1,
+            'excluded_untracked_truncated': False}))
+        disclosure = document.by_id('snapshot-files')
+        for filename in hostile:
+            self.assertIn(filename, disclosure.text())
+        self.assertFalse(list(disclosure.descendants('script')))
+        self.assertFalse(list(disclosure.descendants('img')))
+        self.assertFalse(list(disclosure.descendants('a')))
+        self.assertEqual(len(document.elements('script')), 1)
+        for script in document.elements('script'):
+            self.assertFalse(any(filename in script.text() for filename in hostile))
+        self.assert_local_resources(document)
+
+    def test_legacy_report_without_snapshot_inputs_keeps_existing_settings(self):
+        document = self.render(self.report())
+        self.assertIsNotNone(document.by_id('settings'))
+        self.assertIsNone(document.by_id('snapshot-files'))
+        self.assertIn('Experiment configuration', document.visible_text())
+        self.assert_semantics(document)
+        self.assert_local_resources(document)
+
+    def test_snapshot_filenames_do_not_leak_into_aggregate_share(self):
+        filenames = ['PRIVATE_INCLUDED_FILE_731.py', 'PRIVATE_EXTRA_FILE_852.json',
+                     'PRIVATE_EXCLUDED_FILE_963.txt']
+        report = self.report(snapshot_inputs={
+            'included_files': filenames[:2], 'extra_files': [filenames[1]],
+            'excluded_untracked': [filenames[2]], 'excluded_untracked_count': 1,
+            'excluded_untracked_truncated': False})
+        document = self.render(report)
+        self.assertTrue(all(filename in document.visible_text() for filename in filenames))
+        public = export_summary(self.out, self.root / 'snapshot-summary.html')
+        content = public.read_text(encoding='utf-8')
+        for filename in filenames:
+            self.assertNotIn(filename, content)
+        self.assertNotIn('snapshot_inputs', content)
+        self.assertFalse(Document(content).elements('a'))
+
     def test_public_summary_redesign_keeps_whitelist_and_no_active_resources(self):
         secret = 'PRIVATE_SUMMARY_MARKER_123456789'
         report = self.report(message=secret, task=secret, requested_model=secret, created_at=secret,

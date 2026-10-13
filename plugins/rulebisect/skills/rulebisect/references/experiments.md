@@ -1,6 +1,6 @@
 # Set up, reduce, compare
 
-All commands below follow `python3 "<skill-directory>/scripts/rulebisect_cli.py"`; replace placeholders and quote paths. Choose a Python 3.11+ interpreter. Use `--repo REPO` explicitly. Custom `--config CONFIG` is supported by status, doctor, plan, check, run, compare, resume and case commands; consult the command's `--help` for its options. Next-step messages from the engine may show a bare `rulebisect` command: use the same bundled launcher prefix instead.
+All commands below follow `python3 "<skill-directory>/scripts/rulebisect_cli.py"`; replace placeholders and quote paths. Choose a Python 3.11+ interpreter. Use `--repo REPO` explicitly. Custom `--config CONFIG` is supported by status, doctor, inspect, draft, plan, check, run, compare, resume and case commands; consult the command's `--help` for its options. Next-step messages from the engine may show a bare `rulebisect` command: use the same bundled launcher prefix instead.
 
 ## New failure
 
@@ -16,11 +16,13 @@ check --all --repo REPO
 
 Use exactly one of `--check COMMAND`, `--oracle verifier.py`, or `--assertions checks.json` at init. An oracle is repository-relative Python and returns 0/1/2+ for pass/behavior failure/infrastructure failure. A test command is wrapped into a protected Python oracle. Existing instructions are discovered from tracked AGENTS.md/AGENTS.override.md and untracked root instructions; review the selection. Skill files and untracked nested instructions require explicit `--instructions` selection.
 
+A direct `--oracle` is executed from its frozen copy outside the workspace, so it should be standalone. For a verifier that imports project modules, use `--check "python verify.py"` and protect the verifier and acceptance-helper files in `protected_files`. Snapshot Git repositories have no source index or history; use explicit test paths rather than checks that rely on `git ls-files` discovering the original tracked files.
+
 An interactive session can use `init --wizard --repo REPO --instructions rules.md` for custom instructions. Invalid selected paths are rejected before prompts or configuration writes.
 
 Init writes configuration and, when needed, a generated verifier. It does not execute setup, checks or a model. Setup commands are optional and saved with `--setup "COMMAND"`. Accept the actual command before executing `check` or a model experiment. Protect other acceptance files that must remain fixed.
 
-Snapshots contain Git-tracked working files plus explicitly selected instructions, oracle and protected files. Other untracked source, dependency or output files are absent from fresh checks and experiments. When an existing file must be part of the baseline, explain this before asking the user to track it; do not `git add` unrelated files automatically. Missing generated output can be an expected initial behavior failure.
+Snapshots contain Git-tracked working files plus explicitly selected instructions, oracle, protected files and `include_files`. Use `init --include FILE ...` (also with `--wizard`) or edit the top-level `include_files` list for existing baseline files that the task needs without staging them in Git. Paths are exact repository-relative regular files, with no directory recursion or glob expansion. Included source files remain mutable; acceptance criteria belong in `protected_files`. `status` and `doctor` summarize omitted inputs; their `--json` output, `plan --json` and `compare --plan` include the file inventory and a bounded preview of omitted nonignored untracked files; ignored untracked files are absent unless explicitly selected. Missing generated output can be an expected initial behavior failure; do not include it merely to force a passing check.
 
 After checking the verifier and obtaining authorization for the selected model and budget:
 
@@ -49,7 +51,7 @@ draft --repo REPO --out NEW_PROPOSAL
 compare --repo REPO --proposed NEW_PROPOSAL --plan
 ```
 
-Edit only copied instruction paths in the proposal. Keep the original instructions and task checks unchanged. A comparison alternates arm order, starts each arm from the same current code snapshot, and protects the suite's verifier union in both arms.
+For a custom config, pass the same `--config PATH` to `inspect`, `draft` and `compare`. With no positional files, `inspect` follows saved instructions and unit mode, falling back to discovery only when no config exists. Edit only copied instruction paths in the proposal. Keep the original instructions and task checks unchanged. A comparison alternates arm order, starts each arm from the same current code snapshot, and protects the suite's verifier union in both arms.
 
 After the user authorizes the planned calls/model/budget:
 

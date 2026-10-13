@@ -119,3 +119,42 @@ with tempfile.TemporaryDirectory(prefix='rulebisect-installed-assertions-') as d
     assert (repo / '.rulebisect.json').read_bytes() == original_config
     assert not (repo / '.rulebisect' / 'checks' / 'malformed.py').exists()
 print('Installed no-code assertions and sharing workflow passed; no Codex/model calls.')
+
+with tempfile.TemporaryDirectory(prefix='rulebisect-installed-inputs-') as directory:
+    root = Path(directory)
+    repo = root / 'project'
+    repo.mkdir()
+    (repo / 'rules.md').write_text('Preserve the input contract.\n\nKeep output concise.\n', encoding='utf-8')
+    subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+    subprocess.run(['git', 'add', 'rules.md'], cwd=repo, check=True)
+    (repo / 'new source.py').write_text('assert 6 * 7 == 42\n', encoding='utf-8')
+    (repo / 'unused.txt').write_text('Omitted on purpose.\n', encoding='utf-8')
+    index = subprocess.check_output(['git', 'ls-files', '-z'], cwd=repo)
+
+    def inputs_cli(arguments, answers=None):
+        result = subprocess.run([sys.executable, '-X', 'utf8', '-m', 'rulebisect', *arguments,
+                                 '--repo', str(repo)], cwd=root, input=answers,
+                                text=True, encoding='utf-8', capture_output=True)
+        assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+        print(result.stdout)
+        return result.stdout
+
+    inputs_cli(['init', '--wizard', '--instructions', 'rules.md', '--include', 'new source.py'],
+               'Keep the source working\npython "new source.py"\n\n\n')
+    custom = root / 'custom experiment.json'
+    (repo / '.rulebisect.json').rename(custom)
+    common = ['--config', str(custom)]
+    status = json.loads(inputs_cli(['status', '--json', *common]))
+    snapshot = status['scope']['snapshot_inputs']
+    assert snapshot['extra_files'] == ['new source.py']
+    assert snapshot['excluded_untracked'] == ['unused.txt']
+    inspected = json.loads(inputs_cli(['inspect', '--json', *common]))
+    assert len(inspected) == 2 and all(Path(rule['path']).name == 'rules.md' for rule in inspected)
+    inputs_cli(['check', '--all', '--require-pass', *common, '--out', str(root / 'checks')])
+    inputs_cli(['draft', *common, '--out', str(root / 'proposal')])
+    planned = json.loads(inputs_cli(['compare', *common, '--proposed', str(root / 'proposal'), '--plan']))
+    assert planned['snapshot_inputs'] == snapshot
+    assert planned['model_calls'] == 0
+    assert index == subprocess.check_output(['git', 'ls-files', '-z'], cwd=repo)
+    assert (repo / 'new source.py').read_text(encoding='utf-8') == 'assert 6 * 7 == 42\n'
+print('Installed explicit inputs and custom configuration workflow passed; no Codex/model calls.')

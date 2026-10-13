@@ -1,4 +1,15 @@
-# Validation — v0.8.0 / Codex Skill and plugin 0.2.0
+# Validation — v0.9.0 / Codex Skill and plugin 0.3.0
+
+Executed on macOS, 2026-10-13. This update improves baseline-file selection and configuration continuity; it does not measure model effectiveness.
+
+- All **265 automated tests passed** on Python 3.11.15. Snapshot and input-workflow checks also passed on Python 3.14.4. These cover frozen file bytes/modes/hashes, mutable included source, protected acceptance files, unchanged source/index, suite selection, custom-config inspection/drafting and invalid-input handling before writes.
+- Independent review reproduced and fixed incorrect case aliases on a case-insensitive filesystem and inconsistent `.GiT` protection in draft creation. Unicode-normalization aliases are distinguished from separate filenames using actual directory entries. A non-UTF-8 Git-output fixture reproduced and fixed preview decoding failures without reading omitted contents; this macOS filesystem does not permit native invalid-UTF-8 filenames.
+- Built the 0.9.0 wheel and exercised it outside the source checkout: guided setup, strict verifier checks, assertions, sharing, explicit untracked inputs and custom-config inspect/draft/compare planning passed. The installed fix simulation made eight deterministic simulator executions and zero model calls.
+- An independent forward test followed the bundled Skill launcher in a fresh repository with custom rules, untracked Python source/tests and paths containing spaces. Two trusted unit tests passed; the comparison plan recorded six planned calls and zero executed calls. Original files, configuration, oracle and raw Git index bytes remained unchanged.
+- Skill validation and byte-for-byte vendor checks passed. Skill/plugin 0.3.0 includes all 20 allowlisted engine modules. Report tests cover escaped snapshot names, legacy reports and aggregate-share privacy; generated report controls passed the mock-DOM checks. No browser layout or visual acceptance was performed.
+- Existing limitations remain explicit: direct oracles should be standalone; use a protected project check command for sibling imports. Copied workspaces contain no source Git index/history, so checks relying only on `git ls-files` need explicit test paths. No real Codex/model calls were made for this update.
+
+# Earlier validation — v0.8.0 / Codex Skill and plugin 0.2.0
 
 Executed on macOS, 2026-10-11. This update improves onboarding and offline workflow guidance; it does not measure model effectiveness.
 

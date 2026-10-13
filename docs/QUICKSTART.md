@@ -35,7 +35,42 @@ rulebisect init --task "Implement normalize_label in labels.py." \
 
 For an automation gate, use `rulebisect check --all --require-pass`: selected passing behaviors exit 0, behavior failures exit 1, and execution problems exit 2. With `--cases`, omitted cases remain explicitly untested. A single `check` supports the same option.
 
-Checks use fresh snapshots of Git-tracked working files, plus selected instructions, the oracle and protected files. An ordinary untracked file will not appear there even if it exists in your source folder. Explicitly track the source/output files that should be part of the initial baseline; generated output may instead be expected to fail until the task is implemented.
+### Include new source files and preview the snapshot
+
+Snapshots contain Git-tracked current working files, including uncommitted edits, plus selected instructions, oracles, protected files and explicit `include_files`. For existing untracked source files, list their exact repository-relative paths when initializing:
+
+```sh
+rulebisect init --wizard --include labels.py src/new_helper.py
+rulebisect status
+rulebisect doctor --offline
+rulebisect plan --json
+```
+
+`--include FILE ...` also works with direct `init` options and `--instructions`. Existing configs can add `"include_files": ["labels.py", "src/new_helper.py"]`. Entries must be existing files inside the repository; directories and symlinks are rejected, with no recursive selection or glob expansion. Git staging is unchanged.
+
+`status` and `doctor` summarize inputs and warn about nonignored untracked omissions. View the full `snapshot_inputs` inventory with `status --json`, `doctor --offline --json`, `plan --json` or `compare --plan`; JSON includes omission counts and a bounded filename preview. Non-UTF-8 filename bytes are escaped for display, with counts based on the original names.
+
+Included source files can still be edited by the task; put acceptance tests or verifier dependencies in `protected_files` to keep them unchanged. Review the inventory before `check` or a real experiment. Output the task has yet to generate may be expected to fail its initial check.
+
+### Keep a custom configuration consistent
+
+For an existing `experiment.json`, use the same config when checking, inspecting, drafting and comparing:
+
+```sh
+rulebisect status --config experiment.json
+rulebisect check --config experiment.json --all --open
+rulebisect inspect --config experiment.json
+rulebisect draft --config experiment.json --out ../proposed-rules
+rulebisect compare --config experiment.json --proposed ../proposed-rules --plan
+```
+
+With no `--config`, `inspect` and `draft` use the instruction selection in `.rulebisect.json` when present. Positional files explicitly select what `inspect` reads, for example `rulebisect inspect rules.md skills/review/SKILL.md`.
+
+### Verifier paths and Git metadata
+
+An `--oracle` verifier runs as an immutable copy outside the workspace, so direct sibling imports may fail. For a verifier that imports repository helpers, use `--check "python verify.py"` and add `verify.py` and those helpers to `protected_files`.
+
+The source Git index and history are not copied. A verifier using `git ls-files` for discovery can see no files in the snapshot; give that check explicit file paths.
 
 ### Keep regression cases
 
@@ -81,6 +116,7 @@ Inspect regressions, remaining failures and uncertainty individually. Passing th
 | I do not know which step is next | `rulebisect status` |
 | I want to try it without Codex | `rulebisect demo --scenario regression --open` |
 | I have a concrete failing task and check | `rulebisect init --wizard`, then `check --all` |
+| My untracked source is missing from checks | Review `status`; set `include_files` or use `init --include FILE ...` |
 | My check cannot run reliably | Read the `check --all --open` report; fix setup or the verifier first |
 | I want to locate failing instruction interactions | `rulebisect plan`, then `rulebisect run --open` |
 | I want to edit a rule without losing the baseline | `draft`, selected `compare --plan`, then full `compare` |
@@ -115,7 +151,42 @@ Python 命令建议需要项目配置或测试源码中的 pytest / unittest 依
 
 自动化需要要求行为通过时，使用 `rulebisect check --all --require-pass`：选中检查通过退出 0，行为失败退出 1，执行故障退出 2。搭配 `--cases` 时其余案例仍会明确显示未测试；单个 `check` 同样支持这个选项。
 
-初始快照包含 Git 已跟踪的工作文件，以及选中的指令、验证器和保护文件。普通未跟踪文件即使存在于原目录，也不会进入新快照；需要作为初始基线的代码或输出文件应显式跟踪。任务尚未生成输出时，行为失败可能正是预期。
+### 加入新写的源码，先预览快照
+
+快照包含 Git 已跟踪文件的当前内容（包括未提交修改），以及选中的指令、验证器、保护文件和 `include_files`。已有未跟踪源码时，初始化可以明确选择仓库相对路径：
+
+```sh
+rulebisect init --wizard --include labels.py src/new_helper.py
+rulebisect status
+rulebisect doctor --offline
+rulebisect plan --json
+```
+
+直接配置的 `init` 也支持 `--include 文件 ...`，并可与 `--instructions` 合用。已有配置可加入 `"include_files": ["labels.py", "src/new_helper.py"]`。每项须为仓库内已存在的普通文件；目录和符号链接会被拒绝，不递归选择，也不展开通配符，不自动暂存。
+
+`status`、`doctor` 显示输入概要和遗漏提醒。完整 `snapshot_inputs` 清单可通过 `status --json`、`doctor --offline --json`、`plan --json` 或 `compare --plan` 查看；JSON 含遗漏数量和有限的文件名预览。非 UTF-8 文件名字节会转义显示，数量按原始名称统计。
+
+加入快照的源码仍可修改；需要固定的验收测试或验证器依赖应放进 `protected_files`。先核对清单，再执行 `check` 或真实实验。任务尚未生成输出时，初始行为失败可能正是预期。
+
+### 自定义配置贯穿同一流程
+
+已有 `experiment.json` 时，检查、查看指令、准备草案、对照都使用同一个配置：
+
+```sh
+rulebisect status --config experiment.json
+rulebisect check --config experiment.json --all --open
+rulebisect inspect --config experiment.json
+rulebisect draft --config experiment.json --out ../proposed-rules
+rulebisect compare --config experiment.json --proposed ../proposed-rules --plan
+```
+
+未传 `--config` 时，有 `.rulebisect.json` 的仓库会让 `inspect` 和 `draft` 使用保存的指令选择。`inspect` 的位置参数明确选择要查看的文件，例如 `rulebisect inspect rules.md skills/review/SKILL.md`。
+
+### 验证器路径与 Git 元数据
+
+`--oracle` 验证器以不可变副本在工作区外执行，直接导入同目录模块可能失败。验证器需要仓库内辅助模块时，可使用 `--check "python verify.py"`，并把 `verify.py` 和所需模块加入 `protected_files`。
+
+源 Git 索引和历史不会复制。依赖 `git ls-files` 发现文件的检查可能在快照中得到空列表，应改为明确指定要检查的文件路径。
 
 ### 把案例保存下来
 
@@ -157,6 +228,7 @@ rulebisect compare --proposed ../proposed-rules --open
 | 不知道当前该做哪一步 | `rulebisect status` |
 | 想先体验，不使用 Codex | `rulebisect demo --scenario regression --open` |
 | 已有具体失败任务和验证方法 | `init --wizard`，然后 `check --all` |
+| 新写的未跟踪源码没有进入检查 | 查看 `status`；配置 `include_files` 或初始化时使用 `--include 文件 ...` |
 | 验证器跑不起来 | 查看 `check --all --open` 报告，先修好环境或验证器 |
 | 想定位触发失败的规则组合 | `plan`，然后 `run --open` |
 | 修改规则，担心破坏其他任务 | `draft`，局部 `compare --plan`，最后完整 `compare` |
