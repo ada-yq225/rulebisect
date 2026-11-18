@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import sys
+from zipimport import zipimporter
 from pathlib import Path
 
 from .configuration import load_configuration
@@ -11,12 +13,23 @@ from .history import history
 from .setup import CONFIG_NAME, doctor
 
 
+def cli_prefix() -> list[str]:
+    """Return a runnable CLI for the distribution that generated this advice."""
+    if isinstance(__loader__, zipimporter):
+        return [sys.executable, '-I', '-X', 'utf8', str(Path(__loader__.archive).resolve())]
+    return ['rulebisect']
+
+
 def format_command(arguments: list[str]) -> str:
     """Format suggested commands for the platform's documented shell."""
+    if arguments and arguments[0] == 'rulebisect':
+        arguments = [*cli_prefix(), *arguments[1:]]
     if os.name != 'nt':
         return shlex.join(arguments)
     # PowerShell single quotes preserve spaces, dollar signs and backticks.
-    return ' '.join(value if re.fullmatch(r'[A-Za-z0-9_./:=+-]+', value)
+    # A quoted executable path needs PowerShell's call operator.
+    operator = '& ' if arguments and not re.fullmatch(r'[A-Za-z0-9_./:=+-]+', arguments[0]) else ''
+    return operator + ' '.join(value if re.fullmatch(r'[A-Za-z0-9_./:=+-]+', value)
                     else "'" + value.replace("'", "''") + "'" for value in arguments)
 
 
@@ -30,7 +43,7 @@ def workspace_status(repo: Path, config_path: Path | None = None) -> dict:
                              if value['name'] == 'Git repository' and value['ok']), None)
     if repository_check is None:
         result['next_steps'] = [{'label': 'Try a simulation, or choose an existing Git repository',
-                                'argv': ['rulebisect', 'demo', '--scenario', 'regression']}]
+                                'argv': [*cli_prefix(), 'demo', '--scenario', 'regression']}]
         return result
     root = Path(repository_check['detail'])
     config = Path(config_path).absolute() if config_path is not None else root / CONFIG_NAME
@@ -48,7 +61,7 @@ def workspace_status(repo: Path, config_path: Path | None = None) -> dict:
         found = next((value['ok'] for value in result['checks']
                       if value['name'] == 'Instruction files'), False)
         result['state'] = 'needs_configuration' if found else 'needs_instructions'
-        command = ['rulebisect', 'init', '--wizard', '--repo', str(root)]
+        command = [*cli_prefix(), 'init', '--wizard', '--repo', str(root)]
         if not found:
             command += ['--instructions', 'PATH_TO_YOUR_RULES']
         result['next_steps'] = [{'label': 'Configure a concrete task and an independent check'
@@ -64,13 +77,13 @@ def workspace_status(repo: Path, config_path: Path | None = None) -> dict:
                               'comparison_calls': scope['comparison_calls']})
         result['next_steps'] = [
             {'label': 'Exercise setup and verifiers on fresh initial snapshots',
-             'argv': ['rulebisect', 'check', '--all', *common]},
+             'argv': [*cli_prefix(), 'check', '--all', *common]},
             {'label': 'Review the reduction scope and execution cap before model calls',
-             'argv': ['rulebisect', 'plan', *common]},
+             'argv': [*cli_prefix(), 'plan', *common]},
         ]
     else:
         result['next_steps'] = [{'label': 'Fix the inputs reported above, then recheck',
-                                'argv': ['rulebisect', 'doctor', '--offline', *common]}]
+                                'argv': [*cli_prefix(), 'doctor', '--offline', *common]}]
     return result
 
 

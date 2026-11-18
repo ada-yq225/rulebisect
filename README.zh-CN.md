@@ -6,13 +6,27 @@
 
 永久免费 · MIT 开源 · 只支持 Codex · 本地运行 · 无遥测。真实实验使用**你本机 Codex CLI 的登录身份和账户额度**，模型调用仍可能产生费用；配置、规划、验证器检查和确定性演示不调用模型。当前为实验性工具。
 
-[先看演示](#先看效果无需-codex-账户) · [使用 Codex Skill](#作为-codex-skill-使用) · [检查自己的仓库](docs/QUICKSTART.md) · [读懂报告](docs/REPORTS.md) · [English](README.md)
+[先看演示](#先看效果无需-codex-账户) · [使用 Codex Skill](#作为-codex-skill-使用) · [检查自己的仓库](docs/QUICKSTART.md#中文) · [读懂报告](docs/REPORTS.md) · [English](README.md)
 
-不知道下一步怎么做时，在目标仓库运行 `rulebisect status`。它会离线检查配置，展示快照文件数量、遗漏提醒、案例、预算和下一步命令，不运行准备命令、测试或 Codex。新写的源码可显式加入快照，保留 Git 暂存状态。直接运行 `rulebisect` 也会显示上手入口。旧报告只代表保存时的快照。
+## 先看效果：无需 Codex 账户
 
-已有自定义规则文件或 Skill 时，可使用 `rulebisect init --wizard --instructions rules.md` 继续向导。配置 JSON 出错会标明实际文件路径和行列，方便直接修正。
+下载 [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect.pyz)，在下载目录打开终端。有 Python 3.11 或更高版本和 Git，就能直接运行这个文件。
 
-需要在 CI 中要求行为全部通过时，使用 `rulebisect check --all --require-pass`：退出 0 表示选中检查通过，1 表示行为失败，2 表示执行故障；默认检查仍允许任务尚未实现时的行为失败。`--cases` 只检查选中案例，其余会明确显示未测试。
+**macOS 或 Linux**
+
+```sh
+python3 -I rulebisect.pyz demo --scenario regression --open
+```
+
+**Windows（Python 3.11）**
+
+```powershell
+py -3.11 -I rulebisect.pyz demo --scenario regression --open
+```
+
+打开报告，可以看到同一条新规则让新版标签通过检查，却让旧版标签失败。演示执行 8 次确定性模拟，模型调用为零。终端会打印 `report.html` 的路径，方便再次打开。把 `regression` 换成 `fix`，可以看到缩小规则适用范围后，两项检查都通过。演示发现预设回归时退出码为 0。真实 `compare` 发现回归时退出码为 2。
+
+要检查自己的项目，可以按照[仓库快速上手指南](docs/QUICKSTART.md#中文)配置第一个任务。如果习惯在 Codex 对话里操作，可安装下面的 Skill。
 
 ## 作为 Codex Skill 使用
 
@@ -54,29 +68,14 @@ codex plugin marketplace add ada-yq225/rulebisect
 
 </details>
 
-## 先看效果：无需 Codex 账户
-
-按下面步骤安装后，直接运行：
-
-```sh
-rulebisect demo --scenario regression --open
-rulebisect demo --scenario fix --open
-```
-
-第一个演示“新规则修好现代标签，却破坏兼容标签”，第二个展示缩小规则范围后，两种契约都通过。每个演示执行 8 次确定性模拟，**模型调用为零**，报告在本地打开。重复体验自动使用不同输出目录。
-
-演示成功捕获预设回归时退出码为 0；真实 `compare` 发现回归仍返回 2，可以用于阻止错误修改。
-
-选择入口：**调查失败用 `run`，验证修改用 `draft` + `compare`，先体验用 `demo`**。真实任务需要可执行的通过/失败检查。
-
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.9.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.9.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.10.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.10.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.9.0/rulebisect-0.9.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect-0.10.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -101,6 +100,12 @@ rulebisect run --model 你可用的Codex模型ID --open
 ```
 
 向导收集具体任务、独立检查、可选的环境准备命令和模型。检查步骤可以输入 `:exists`、`:contains` 或 `:json`，按提示选择文件、文本或 JSON 验收条件；多个条件用 `@checks.json`，已有测试则填检查命令。建议命令需要你明确选择；不会自动安装依赖、执行检查或调用模型。创建后，请审查配置中的 `instructions`、`include_files` 和 `protected_files`。
+
+不知道下一步怎么做时，在目标仓库运行 `rulebisect status`。它会离线检查配置，展示快照文件数量、遗漏提醒、案例、预算和下一步命令，不运行准备命令、测试或 Codex。新写的源码可显式加入快照，保留 Git 暂存状态。直接运行 `rulebisect` 也会显示上手入口。旧报告只代表保存时的快照。
+
+已有自定义规则文件或 Skill 时，可使用 `rulebisect init --wizard --instructions rules.md` 继续向导。配置 JSON 出错会标明实际文件路径和行列，方便直接修正。
+
+需要在 CI 中要求行为全部通过时，使用 `rulebisect check --all --require-pass`：退出 0 表示选中检查通过，1 表示行为失败，2 表示执行故障；默认检查仍允许任务尚未实现时的行为失败。`--cases` 只检查选中案例，其余会明确显示未测试。
 
 ### 先看清快照里有哪些文件
 

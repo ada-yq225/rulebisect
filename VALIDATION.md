@@ -1,4 +1,8 @@
-# Validation — v0.9.0 / Codex Skill and plugin 0.3.0
+# Validation — v0.10.0 / Codex Skill and plugin 0.4.0
+
+On 2026-11-18, the full suite passed on macOS with Python 3.11 (270 tests). Portable CLI and check-diagnostic tests also passed on Python 3.14. A fresh process outside the source checkout ran the portable regression demo and recorded eight simulated executions. Release packaging includes the portable archive, wheel, Skill and plugin with a SHA-256 manifest. The tests for this release used local verifiers and simulations with zero real model calls.
+
+# Earlier validation — v0.9.0 / Codex Skill and plugin 0.3.0
 
 Executed on macOS, 2026-10-13. This update improves baseline-file selection and configuration continuity; it does not measure model effectiveness.
 

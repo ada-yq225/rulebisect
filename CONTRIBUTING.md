@@ -46,3 +46,14 @@ Full reports and diffs can contain private source, filenames or secrets. Remove 
 ## Project boundaries
 
 We prioritize understandable, local workflows: reproduce a failing Codex task, reduce selected instructions, then validate a proposed change against independent checks. A reduced failing subset is not a fix. Fresh confirmations and uncertain outcomes must stay visible. We do not add telemetry, paid tiers, silent model calls, or automatic edits to the original repository.
+
+## Build a release locally
+
+Use the Python 3.11+ environment that has pip and the setuptools version required by `pyproject.toml`. After synchronizing the Skill runtime, build the downloads into a new directory beside the checkout.
+
+```sh
+python scripts/build_skill_plugin.py
+python scripts/build_release.py --out ../rulebisect-release
+```
+
+The command builds the single-file CLI, wheel, Skill and plugin archives, checks their integrity and writes `SHA256SUMS`. From the output directory, run `python -I rulebisect.pyz demo --scenario regression` to exercise the portable CLI before publishing.

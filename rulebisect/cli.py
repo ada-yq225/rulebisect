@@ -22,12 +22,30 @@ from .core import split_rules
 from .demo import run_demo, run_comparison_demo
 from .experiment import Experiment
 from .report import write_report
+from .report_ui import artifact_path
 from .setup import CONFIG_NAME, _repository_file, discover_instructions, doctor, draft_instructions, git_root, init_config, snapshot_warnings
 
 
 def default_output(repo: Path, purpose='run') -> Path:
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     return repo.parent / '.rulebisect-runs' / repo.name / f'{purpose}-{stamp}'
+
+
+def print_check_failure(directory, verifier, setup=None, *, case_id=None):
+    failed_setup = setup is not None and setup.get('exit_code') != 0
+    stage = 'Setup' if failed_setup else 'Verifier'
+    process = setup if failed_setup else verifier
+    detail = process.get('error') or process.get('reason')
+    if process.get('status') == 'timeout':
+        detail = 'The command timed out.'
+    elif failed_setup and not detail and process.get('exit_code') is not None:
+        detail = f"Command exited with code {process['exit_code']}."
+    prefix = f'  [{case_id}] ' if case_id else ''
+    if detail:
+        print(f'{prefix}{stage}: {detail}')
+    log = artifact_path(directory, 'setup.log' if failed_setup else 'check.log')
+    if log is not None:
+        print(f'{prefix}{stage} log: {log}')
 
 
 def load_assertions(path):
@@ -78,11 +96,12 @@ def experiment_from(args):
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv:
+        command = format_command(['rulebisect'])
         print(f'RuleBisect {__version__} — debug Codex rules and catch instruction regressions.\n'
-              '\nTry a simulation:  rulebisect demo --scenario regression --open\n'
-              'See your next step: rulebisect status\n'
-              'Set up a task:      rulebisect init --wizard\n'
-              'All commands:       rulebisect --help\n'
+              f'\nTry a simulation:  {command} demo --scenario regression --open\n'
+              f'See your next step: {command} status\n'
+              f'Set up a task:      {command} init --wizard\n'
+              f'All commands:       {command} --help\n'
               '\nThese entry points make no model calls. Real run/compare/resume executions use your Codex account.')
         return 0
     parser = argparse.ArgumentParser(description='RuleBisect — investigate Codex instruction failures. MIT / local-first.')
@@ -203,7 +222,8 @@ def main(argv=None) -> int:
             elif args.case_command == 'add':
                 result = add_case(repo, path, args.id, args.task, check=args.check, oracle=args.oracle,
                                   assertions=load_assertions(args.assertions))
-                print(f"Saved case {result['id']}. Next: rulebisect check --all --repo \"{repo}\" --config \"{path}\"\nNo model calls; verifier was saved without execution.")
+                next_check = format_command(['rulebisect', 'check', '--all', '--repo', str(repo), '--config', str(path.absolute())])
+                print(f"Saved case {result['id']}. Next: {next_check}\nNo model calls; verifier was saved without execution.")
                 if args.assertions:
                     print('Assertions are frozen in the generated verifier; editing the input JSON does not change saved criteria.')
             else:
@@ -352,7 +372,9 @@ def main(argv=None) -> int:
                         print(f"Untested cases: {', '.join(omitted)}")
                     for case in report['cases']:
                         if case['outcome'] in ('fail', 'error'):
-                            print(f"  {case['id']} details: {out / 'cases' / case['id'] / 'report.html'}")
+                            directory = out / 'cases' / case['id']
+                            print_check_failure(directory, case['result'], case.get('setup_check'), case_id=case['id'])
+                            print(f"  {case['id']} details: {directory / 'report.html'}")
                     print(f"{report['status']}: {report['message']}\nReport: {out / 'report.html'}")
                     if args.open:
                         webbrowser.open((out.resolve() / 'report.html').as_uri())
@@ -364,14 +386,15 @@ def main(argv=None) -> int:
                     print(f'NOTE  {warning}')
                 code = result.get('exit_code')
                 outcome = 'passed' if code == 0 else 'behavior failure' if code == 1 else 'execution error'
-                print(f'Initial snapshot: {outcome} (exit {code}).')
+                exit_detail = f' (exit {code})' if code is not None else ''
+                print(f'Initial snapshot: {outcome}{exit_detail}.')
                 if code == 1:
                     print('Behavior failures can be expected before the task is implemented; inspect the check before running Codex.')
                 elif code != 0:
                     print('Fix setup or the verifier before running Codex.')
-                if result.get('reason'):
-                    print(result['reason'])
-                print(f'No Codex calls. Report: {out / "report.html"}\nLogs: {out}')
+                if code != 0:
+                    print_check_failure(out, result, experiment.report.get('setup_check'))
+                print(f'No Codex calls. Report: {out / "report.html"}')
                 if args.open:
                     webbrowser.open((out.resolve() / 'report.html').as_uri())
                 return (1 if args.require_pass and code == 1 else 0) if code in (0, 1) else 2

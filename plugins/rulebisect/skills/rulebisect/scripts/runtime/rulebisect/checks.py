@@ -53,7 +53,11 @@ class SuiteCheck:
                 result = exp.check_initial(prepared=True)
                 code = result.get('exit_code')
                 case.update(result=result, outcome='pass' if code == 0 else 'fail' if code == 1 else 'error')
-                print(f"  {case['id']}: {case['outcome']} (exit {code})", flush=True)
+                setup = exp.report['setup_check']
+                if setup.get('exit_code') != 0:
+                    case['setup_check'] = setup
+                exit_detail = f' (exit {code})' if code is not None else ''
+                print(f"  {case['id']}: {case['outcome']}{exit_detail}", flush=True)
                 write_report(self.out, self.report)
             failed = any(case['outcome'] == 'error' for case in self.report['cases'])
             self.report.update(status='checks_failed' if failed else 'checks_completed',
