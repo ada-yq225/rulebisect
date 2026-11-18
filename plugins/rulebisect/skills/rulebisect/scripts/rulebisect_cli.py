@@ -94,10 +94,13 @@ def main(argv=None) -> int:
         import rulebisect
         if Path(rulebisect.__file__).resolve() != runtime / 'rulebisect' / '__init__.py':
             raise ValueError('A different RuleBisect engine is already loaded; launch this script in a fresh Python process')
+        from rulebisect import status
         from rulebisect.cli import main as engine_main
     except (ImportError, OSError, ValueError) as error:
         print(f'rulebisect skill: {error}', file=sys.stderr)
         return 2
+    if __name__ == '__main__':
+        status.skill_launcher = Path(__file__).resolve()
     return engine_main(sys.argv[1:] if argv is None else argv)
 
 

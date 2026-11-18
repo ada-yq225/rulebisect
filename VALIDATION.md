@@ -1,9 +1,10 @@
 # Validation — v0.11.0 / Codex Skill and plugin 0.5.0
 
-On 2026-11-18, all 295 tests passed on macOS with Python 3.11. Tests for this update used local Git repositories, independent verifiers and simulations. They made zero real model calls.
+On 2026-11-18, the macOS checks used Python 3.11, local Git repositories, independent verifiers and simulations. They made zero real model calls.
 
 - All four release artifacts passed checksum and archive-content checks. The wheel installed in a fresh offline environment and passed the installed workflow smoke test.
 - From outside the checkout, the portable CLI, installed wheel, extracted Skill and plugin each created an editable tutorial and exported a review in JSON and offline HTML. Each plan selected two cases, pinned its Git baseline and estimated eight calls.
+- The follow-up command from each distribution reproduced its plan. Standalone Skill and plugin commands worked without a global RuleBisect installation. Headless Chrome rendered the tutorial review at 360 and 1280 pixels wide. Commands wrapped inside the page and the mobile diff scrolled horizontally within its panel.
 - The portable review command reproduced its plan in a directory with spaces. Editing tracked code or proposed rules independently caused the saved command to reject the changed inputs before creating evidence. Restoring the bytes reproduced the original plan. The Git index and earlier reports were preserved.
 
 # Earlier validation — v0.10.0 / Codex Skill and plugin 0.4.0
