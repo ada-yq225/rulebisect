@@ -4,11 +4,29 @@
 
 Give RuleBisect a task and an executable result check. It shrinks reproducible instruction failures, tests proposed changes across tasks, and opens a local evidence workspace with the outcome and next step first.
 
-Preview the files each experiment will copy, explicitly include new source files, and use the same configuration when inspecting, drafting and comparing instructions.
-
 Permanently free · MIT licensed · Codex only · Local-first · No telemetry. Alpha software. **Real experiments use your installed Codex CLI, login and account quota or billing.** Setup, planning, verifier checks and deterministic demos make no model calls.
 
 [Try a demo](#see-what-it-does--no-codex-account-needed) · [Use the Codex Skill](#use-as-a-codex-skill) · [Start with your repository](docs/QUICKSTART.md) · [Read the evidence](docs/REPORTS.md) · [中文说明](README.zh-CN.md)
+
+## See what it does — no Codex account needed
+
+Download [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect.pyz) and open a terminal in the download folder. The single file runs with Python 3.11+ and Git.
+
+**macOS or Linux**
+
+```sh
+python3 -I rulebisect.pyz demo --scenario regression --open
+```
+
+**Windows with Python 3.11**
+
+```powershell
+py -3.11 -I rulebisect.pyz demo --scenario regression --open
+```
+
+The report shows a proposed rule that fixes modern labels but breaks legacy labels. The demo uses eight deterministic simulations and zero model calls. It prints the path to `report.html` so you can reopen it. Change `regression` to `fix` to see both tasks pass. Catching the expected regression makes the demo exit 0. A real `compare` exits 2 on a regression.
+
+For your own project, follow the [repository quick start](docs/QUICKSTART.md#english). If you prefer to work inside Codex, install the Skill below.
 
 ## Use as a Codex Skill
 
@@ -50,27 +68,14 @@ The initial check reports missing output as a behavior failure. Setup and verifi
 
 </details>
 
-## See what it does — no Codex account needed
-
-Install using Python 3.11+ and Git, then try:
-
-```sh
-rulebisect demo --scenario regression --open
-rulebisect demo --scenario fix --open
-```
-
-The first catches a proposed rule that fixes modern labels but breaks legacy labels. The second checks a scoped fix that preserves both contracts. Each uses eight **deterministic simulation executions, zero model calls**. Reports open locally; repeated demos get separate output directories. A successful regression demo exits 0 because catching the constructed regression is expected; real `compare` still exits 2 when it finds a regression.
-
-**Choose your workflow:** a failing task → `run`; a proposed instruction change → `draft` + `compare`; just exploring → `demo`. You need a task with an executable pass/fail check; this does not grade arbitrary prompts automatically.
-
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.9.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.9.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.10.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.10.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.9.0/rulebisect-0.9.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect-0.10.0-py3-none-any.whl
 ```
 
 Or install from source:

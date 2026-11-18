@@ -4,7 +4,7 @@
 
 ## English
 
-After [installation](../README.md#install-and-run-your-own-experiment), run these commands inside the Git repository you want to investigate. Python 3.11+ and Git are required. Only real `run`, `resume` and `compare` executions use your installed Codex CLI, login and quota; the demos are deterministic simulations.
+Run these commands in the Git repository you want to investigate. The examples use the installed `rulebisect` command. With the portable CLI, replace that command with `python3 -I "/path/to/rulebisect.pyz"` or, on Windows with Python 3.11, `py -3.11 -I "C:\path\to\rulebisect.pyz"`. Use the actual path to your download. Both forms require Python 3.11+ and Git. Real experiments additionally use your authenticated Codex CLI and account quota. [Download and try the demo](../README.md#see-what-it-does--no-codex-account-needed).
 
 ### Start with one real task
 
@@ -32,6 +32,8 @@ rulebisect init --task "Implement normalize_label in labels.py." \
 ```
 
 `check --all` runs setup and every case's verifier on fresh initial snapshots without Codex. Exit 0 means each verifier completed with 0 (pass) or 1 (behavior failure); **it does not mean all behaviors passed**. A failure can be expected before the task is implemented. Exit 2 indicates infrastructure trouble. Some frameworks also use 1 for import or setup errors: inspect the report, or use a verifier that returns 0 for pass, 1 for behavior failure, and 2+ for infrastructure failure.
+
+For a failed `check` or `check --all`, open the log path printed for the failing step. `setup.log` contains environment setup output and `check.log` contains verifier output.
 
 For an automation gate, use `rulebisect check --all --require-pass`: selected passing behaviors exit 0, behavior failures exit 1, and execution problems exit 2. With `--cases`, omitted cases remain explicitly untested. A single `check` supports the same option.
 
@@ -127,7 +129,7 @@ Reduction's `candidate/` is a smaller **failing reproducer**, not a proposed fix
 
 ## 中文
 
-完成[安装](../README.zh-CN.md)后，在要检查的 Git 仓库中运行命令。需要 Python 3.11+ 和 Git。真正的 `run`、`resume`、`compare` 执行会使用本机 Codex 登录和额度；演示是明确标注的确定性模拟。
+在要检查的 Git 仓库里运行以下命令。示例使用安装后的 `rulebisect` 命令。如果下载的是单文件版，把命令开头的 `rulebisect` 换成 `python3 -I "/实际路径/rulebisect.pyz"`。Windows 使用 Python 3.11 时，可换成 `py -3.11 -I "C:\实际路径\rulebisect.pyz"`。两种方式均需要 Python 3.11 或更高版本和 Git。真实实验还会使用本机 Codex 的登录身份和账户额度。[下载并体验演示](../README.zh-CN.md#先看效果无需-codex-账户)。
 
 ### 从一个真实任务开始
 
@@ -148,6 +150,8 @@ Python 命令建议需要项目配置或测试源码中的 pytest / unittest 依
 文件输出任务可用 [JSON 断言](ASSERTIONS.md)，无需编写验证脚本；可直接跟做[完整案例](../examples/output-contract/README.md)。条件保存后会固化，修改输入 JSON 不会更新已保存验证器。
 
 `check --all` 在新的初始快照中执行每个案例的 setup 和验证器，不调用 Codex。退出 0 表示各验证器以 0（通过）或 1（行为失败）结束，**不代表全部行为通过**。任务尚未实现时，行为失败可能正是预期。退出 2 表示环境或执行故障。部分测试框架会把导入错误也归为 1，因此要看报告；必要时使用明确区分 0、1、2+ 的 Python 验证器。
+
+执行 `check` 或 `check --all` 遇到失败时，打开终端列出的对应日志。`setup.log` 记录环境准备过程，`check.log` 记录验证器的输出。
 
 自动化需要要求行为通过时，使用 `rulebisect check --all --require-pass`：选中检查通过退出 0，行为失败退出 1，执行故障退出 2。搭配 `--cases` 时其余案例仍会明确显示未测试；单个 `check` 同样支持这个选项。
 

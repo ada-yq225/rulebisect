@@ -144,3 +144,51 @@ class ChecksTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     code = main(arguments)
                 self.assertEqual(code, verifier_code if strict else 0 if verifier_code in (0, 1) else 2)
+
+    def test_failed_checks_point_to_the_actual_stage_log_and_launch_error(self):
+        missing_command = 'rulebisect-nonexistent-check-fixture'
+        for stage in ('Setup', 'Verifier'):
+            config = dict(self.config)
+            if stage == 'Setup':
+                config['setup'] = [missing_command]
+            else:
+                config['setup'] = ['{python}', '-c', 'pass']
+                config['verify'] = [missing_command, '{oracle}']
+            (self.repo / CONFIG_NAME).write_text(json.dumps(config), encoding='utf-8')
+            for suite in (False, True):
+                with self.subTest(stage=stage, suite=suite):
+                    out = self.root / f'evidence with spaces {stage}-{suite}'
+                    arguments = ['check', '--repo', str(self.repo), '--out', str(out)]
+                    output = io.StringIO()
+                    with contextlib.redirect_stdout(output):
+                        code = main(arguments + (['--all'] if suite else []))
+                    self.assertEqual(code, 2)
+                    text = output.getvalue()
+                    case_root = out / 'cases' / 'task' if suite else out
+                    log = case_root / ('setup.log' if stage == 'Setup' else 'check.log')
+                    prefix = '[task] ' if suite else ''
+                    self.assertTrue(log.is_file())
+                    self.assertIn(f'{prefix}{stage} log: {log.resolve()}', text)
+                    self.assertNotIn('exit None', text)
+                    if stage == 'Setup':
+                        self.assertFalse((case_root / 'check.log').exists())
+                        self.assertNotIn('Verifier log:', text)
+                    else:
+                        self.assertNotIn('Setup log:', text)
+                    # Windows CreateProcess does not include the missing command
+                    # in its localized error, so verify the actual saved reason.
+                    saved = json.loads((case_root / 'report.json').read_text(encoding='utf-8'))
+                    process = saved['setup_check' if stage == 'Setup' else 'verifier_check']
+                    self.assertIn(process['error'], text)
+
+    def test_behavior_failure_points_to_verifier_output(self):
+        (self.repo / 'verify.py').write_text('print("expected 7")\nraise SystemExit(1)\n', encoding='utf-8')
+        (self.repo / CONFIG_NAME).write_text(json.dumps(self.config), encoding='utf-8')
+        out = self.root / 'evidence with spaces'
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(['check', '--repo', str(self.repo), '--all', '--require-pass', '--out', str(out)])
+        self.assertEqual(code, 1)
+        log = out / 'cases' / 'task' / 'check.log'
+        self.assertIn(f'[task] Verifier log: {log.resolve()}', output.getvalue())
+        self.assertEqual(log.read_text(encoding='utf-8').strip(), 'expected 7')

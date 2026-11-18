@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 / Skill and plugin 0.4.0
+
+- Download `rulebisect.pyz` and run the full CLI with Python 3.11+ and Git. Portable status and guided setup print commands that use the downloaded file.
+- A failed local check identifies the setup or verifier log for that case. A timeout or launch failure includes its reason when available.
+- Build all release downloads and `SHA256SUMS` with `python scripts/build_release.py --out ../rulebisect-release`.
+
 ## 0.9.0 / Skill and plugin 0.3.0 — Visible experiment inputs
 
 - Include exact baseline files with `init --include FILE ...`, including guided setup, or saved `include_files`; Git staging stays unchanged and source files remain editable in experiment copies.
