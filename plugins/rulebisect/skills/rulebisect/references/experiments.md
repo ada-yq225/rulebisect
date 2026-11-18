@@ -75,3 +75,10 @@ Resume uses matching tool version, settings and snapshot, reuses stable search e
 Real run/compare exits 0 for `observed_1_minimal` or `no_regressions_observed`, and 2 for other reported statuses, including `not_reproduced`. Inspect the report rather than treating every exit 2 as an installation failure. A demo that correctly catches its constructed regression exits 0. Check --all exits 0 when verifiers execute with 0/1 outcomes and 2 for execution trouble, regardless of expected initial behavioral failures.
 
 For a contract that must already pass, `check --all --require-pass` exits 0 for selected passing behaviors, 1 for behavior failures and 2 for execution trouble. With `--cases`, omitted tasks remain untested. The same option works on a single check; it changes the exit policy, not verifier execution or report meaning.
+
+
+## Review changes already in Git
+
+Use `review --repo REPO --base-ref HEAD --diff` to inspect edits to the configured rules, or add `--proposed-ref REV` for a committed proposal. Only rule bytes are read from the specified revisions. Code and verification criteria come from the current repository. The instruction paths must exist in each selected source and in the current checkout.
+
+`review --json` returns source revisions, file hashes, selected and omitted cases, planned calls and a `next_argv` array. Use the same bundled launcher, replace the model placeholder, and run the comparison within the authorized budget. A fingerprint mismatch means the inputs changed. Generate a fresh review before continuing. The local HTML review contains instruction text and local paths.

@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import copy
 import difflib
+import io
 import json
 import re
 import subprocess
 from pathlib import Path
 
+from . import __version__
 from .core import StopSearch, digest
 from .experiment import Experiment
 from .report import token_totals, write_report
+from .revisions import read_revision
 
 
 def suite_cases(config):
@@ -80,11 +83,79 @@ def load_candidate(root, instructions):
 
 class Comparison:
     def __init__(self, repo, config, out, model, repeats, max_runs, timeout,
-                 candidate, max_tokens=None, runner=None):
+                 candidate=None, max_tokens=None, runner=None, *, base_ref=None, proposed_ref=None, expected_inputs=None):
         self.repo, self.config, self.out = repo.resolve(), config, out.resolve()
         self.model, self.repeats, self.max_runs, self.timeout = model, repeats, max_runs, timeout
         self.candidate, self.max_tokens, self.runner = candidate, max_tokens, runner
+        self.base_ref, self.proposed_ref = base_ref, proposed_ref
+        self.expected_inputs = expected_inputs
+        if candidate is not None and proposed_ref is not None:
+            raise ValueError('Choose one candidate source: --proposed DIRECTORY or --proposed-ref REV.')
+        if candidate is None and base_ref is None and proposed_ref is None:
+            raise ValueError('Choose --base-ref REV, --proposed-ref REV or --proposed DIRECTORY.')
         self.experiments = {}
+
+    def _instruction_sources(self, exp):
+        selected = self.config.get('instructions')
+        if not isinstance(selected, list) or not selected:
+            raise ValueError('Config requires an explicit instructions list')
+        paths = [exp.relative(path) for path in selected]
+        working_tree = ({'kind': 'worktree'}, None)
+        baseline = working_tree if self.base_ref is None else read_revision(self.repo, self.base_ref, paths)
+        if self.proposed_ref is not None:
+            candidate = (baseline if self.proposed_ref == self.base_ref
+                         else read_revision(self.repo, self.proposed_ref, paths))
+        elif self.candidate is not None:
+            candidate = ({'kind': 'directory', 'path': str(self.candidate.resolve())},
+                         load_candidate(self.candidate, paths))
+        else:
+            candidate = working_tree
+        return {'baseline': baseline, 'candidate': candidate}
+
+    def _describe_changes(self, before, after):
+        changes, patch = [], []
+        for path in before.instruction_paths:
+            old, new = before.blobs[path][0], after.blobs[path][0]
+            added = removed = 0
+            if old != new:
+                # Split on LF only, so CRLF and final-newline changes survive.
+                old_lines = [line.decode('utf-8') for line in io.BytesIO(old)]
+                new_lines = [line.decode('utf-8') for line in io.BytesIO(new)]
+                headers = ['a/' + path, 'b/' + path]
+                if any(c in path for c in ('\n', '\r', '\t', '"', '\\')):
+                    headers = [json.dumps(name, ensure_ascii=False) for name in headers]
+                for index, line in enumerate(difflib.unified_diff(old_lines, new_lines, *headers)):
+                    if index >= 2:  # Skip file headers, regardless of the line content.
+                        added += line.startswith('+')
+                        removed += line.startswith('-')
+                    patch.append(line)
+                    if not line.endswith('\n'):
+                        patch.append('\n\\ No newline at end of file\n')
+            changes.append({'path': path, 'changed': old != new, 'added_lines': added,
+                            'removed_lines': removed, 'before_sha256': digest(old), 'after_sha256': digest(new)})
+        self._patch = ''.join(patch)
+        return changes
+
+    def _review_fingerprint(self, baseline, candidate, cases, selection):
+        """Identify effective comparison inputs independent of their source labels."""
+        checks = []
+        for name, _ in cases:
+            frozen = self.experiments[name, 'baseline'].report
+            checks.append({'id': name, 'task': frozen['task'], 'oracle': frozen['oracle'],
+                           'verify': frozen['verify'], 'setup': frozen['setup'],
+                           'protected_files': sorted(frozen['protected_files'])})
+        inputs = {'format': 1, 'engine_version': __version__,
+                  'baseline_snapshot': baseline.report['snapshot_sha256'],
+                  'candidate_snapshot': candidate.report['snapshot_sha256'],
+                  'instruction_files': baseline.instruction_paths, 'case_selection': selection,
+                  'checks': checks, 'unit_mode': baseline.report['unit_mode'],
+                  'repeats': self.repeats, 'timeout': self.timeout,
+                  'max_runs': self.max_runs, 'max_tokens': self.max_tokens}
+        return digest(json.dumps(inputs, sort_keys=True, separators=(',', ':')).encode('utf-8'))
+
+    def instruction_diff(self) -> str:
+        """Unified diff of the frozen rule bytes from the most recent successful prepare."""
+        return self._patch
 
     def prepare(self, check_codex=False):
         cases = suite_cases(self.config)
@@ -99,17 +170,18 @@ class Comparison:
                 raise ValueError('Each case needs an oracle (or inherit the top-level oracle)')
             protected.update(files)
             protected.add(oracle)
-        first, proposed = None, None
+        first = None
         for name, config in cases:
             config['protected_files'] = sorted(protected)
             for arm in ('baseline', 'candidate'):
                 exp = Experiment(self.repo, config, self.out / 'cases' / name / arm,
                                  self.model, self.repeats, self.max_runs, self.timeout, runner=self.runner, max_tokens=self.max_tokens)
-                if proposed is None and first is not None:
-                    proposed = load_candidate(self.candidate, first.instruction_paths)
-                overrides = proposed if arm == 'candidate' else None
+                if first is None:
+                    sources = self._instruction_sources(exp)
+                source_info, overrides = sources[arm]
                 exp.prepare(materialize=False, check_codex=check_codex and first is None,
                             instruction_overrides=overrides, allow_empty=True)
+                exp.report['instruction_source'] = source_info
                 if first is None:
                     first = exp
                 if exp.report['source_snapshot_sha256'] != first.report['source_snapshot_sha256']:
@@ -127,13 +199,20 @@ class Comparison:
         candidate_hash = self.experiments[cases[0][0], 'candidate'].report['snapshot_sha256']
         if any(exp.report['snapshot_sha256'] != candidate_hash for (name, arm), exp in self.experiments.items() if arm == 'candidate'):
             raise ValueError('Candidate changed while preparing the suite; retry with stable files')
+        candidate = self.experiments[cases[0][0], 'candidate']
         self.report = copy.deepcopy(first.report)
+        self.report['instruction_sources'] = {arm: metadata for arm, (metadata, _) in sources.items()}
+        self.report['instruction_changes'] = self._describe_changes(first, candidate)
         self.report.update(kind='comparison', limitations=['Finite repeated independent checks, not statistical confidence or causal attribution.', 'Only selected instruction contents vary; external context and model routing remain unpinned.', 'No guarantee on tasks or environments outside the chosen suite.'], candidate=[], trials=[], evaluations=[], cases=[],
                            status='pending', message='Prepared before/after comparison.', max_runs=self.max_runs,
                            max_tokens=self.max_tokens, candidate_snapshot_sha256=candidate_hash,
                            required_calls=required, candidate_instruction_hashes={name: digest(value[0]) for name, value in self.experiments[cases[0][0], 'candidate'].blobs.items() if name in first.instruction_paths})
         self.report['case_selection'] = copy.deepcopy(self.config.get('_case_selection',
             {'available': [name for name, _ in cases], 'selected': [name for name, _ in cases], 'omitted': []}))
+        fingerprint = self._review_fingerprint(first, candidate, cases, self.report['case_selection'])
+        if self.expected_inputs is not None and self.expected_inputs != fingerprint:
+            raise ValueError('Reviewed inputs changed; run rulebisect review again.')
+        self.report['review_fingerprint'] = fingerprint
         for name, config in cases:
             self.report['cases'].append({'id': name, 'task': config['task'], 'oracle': config['oracle'], 'baseline': None, 'candidate': None, 'verdict': 'pending'})
         return {'cases': [name for name, _ in cases], 'variants': ['baseline', 'candidate'],
@@ -142,12 +221,15 @@ class Comparison:
                 'snapshot_sha256': first.report['snapshot_sha256'], 'candidate_snapshot_sha256': candidate_hash,
                 'snapshot_inputs': first.report['snapshot_inputs'],
                 'setup': self.config.get('setup', []), 'output': str(self.out), 'model_calls': 0,
-                'case_selection': self.report['case_selection']}
+                'case_selection': self.report['case_selection'],
+                'review_fingerprint': fingerprint,
+                'instruction_sources': self.report['instruction_sources'],
+                'instruction_changes': self.report['instruction_changes']}
 
     def record_trial(self, exp, case, arm):
         before = len(exp.report['trials'])
         try:
-            return exp.trial([r.id for r in exp.rules], arm)
+            return exp.trial(None, arm)
         finally:
             if len(exp.report['trials']) > before:
                 record = copy.deepcopy(exp.report['trials'][-1])
@@ -161,15 +243,11 @@ class Comparison:
         for exp in self.experiments.values():
             exp.materialize()
         proposed = next(exp for (name, arm), exp in self.experiments.items() if arm == 'candidate')
-        original = next(exp for (name, arm), exp in self.experiments.items() if arm == 'baseline')
-        patch = []
         for name in proposed.instruction_paths:
             target = self.out / 'proposed' / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(proposed.blobs[name][0])
-            for line in difflib.unified_diff(original.blobs[name][0].decode('utf-8').splitlines(True), proposed.blobs[name][0].decode('utf-8').splitlines(True), fromfile='a/' + name, tofile='b/' + name):
-                patch.append(line if line.endswith('\n') else line + '\n\\ No newline at end of file\n')
-        (self.out / 'proposed.patch').write_text(''.join(patch), encoding='utf-8')
+        (self.out / 'proposed.patch').write_bytes(self.instruction_diff().encode('utf-8'))
         self.report['status'] = 'running'
         write_report(self.out, self.report)
         try:

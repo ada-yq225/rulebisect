@@ -16,6 +16,7 @@ from . import __version__
 from .core import StopSearch, digest, reduce_failure, split_rules
 from .report import write_report
 from .runner import codex_command, codex_metadata, run_process
+from .setup import check_git_environment
 
 
 class Experiment:
@@ -50,6 +51,7 @@ class Experiment:
         return path.as_posix()
 
     def prepare(self, materialize: bool = True, check_codex: bool = True, instruction_overrides: dict[str, bytes] | None = None, allow_empty: bool = False):
+        check_git_environment()
         self.repo, self.out = self.repo.resolve(), self.out.resolve()
         if self.out.is_relative_to(self.repo):
             raise ValueError("Output directory must be outside the target repository")
@@ -262,8 +264,8 @@ class Experiment:
         with tempfile.TemporaryDirectory(prefix="rulebisect-check-") as temporary:
             workspace = Path(temporary) / "repo"
             workspace.mkdir()
-            self.workspace(workspace, [r.id for r in self.rules])
-            setup = self.setup_workspace(workspace, self.out / "setup.log", [r.id for r in self.rules])
+            self.workspace(workspace, None)
+            setup = self.setup_workspace(workspace, self.out / "setup.log", None)
             self.report["setup_check"] = setup
             result = run_process(self.verify_command(), workspace, self.out / "check.log", self.timeout) if setup.get("exit_code") == 0 else {"exit_code": 2, "reason": "Environment setup failed; see setup.log"}
         self.report.update(kind="check", runner="verifier_only", requested_model=None, status="check_only", message="Initial snapshot check completed. No Codex or model calls made; inspect setup/check results.", verifier_check=result)
@@ -274,11 +276,17 @@ class Experiment:
         replacements = {"{oracle}": str(self.oracle_path), "{python}": sys.executable}
         return [replacements.get(v, v) for v in self.config["verify"]]
 
-    def workspace(self, path: Path, ids: list[int]):
-        selected = set(ids)
-        for name, (data, mode) in self.blobs.items():
-            if name in self.instruction_paths:
-                data = "".join(r.text for r in self.rules if r.path == name and r.id in selected).encode("utf-8")
+    def _workspace_content(self, name: str, selected: set[int] | None) -> bytes:
+        # None means use the complete frozen file. [] in a reduction instead
+        # means remove all rule units, even if the original file was whitespace.
+        if selected is None or name not in self.instruction_paths:
+            return self.blobs[name][0]
+        return ''.join(r.text for r in self.rules if r.path == name and r.id in selected).encode('utf-8')
+
+    def workspace(self, path: Path, ids: list[int] | None):
+        selected = None if ids is None else set(ids)
+        for name, (_, mode) in self.blobs.items():
+            data = self._workspace_content(name, selected)
             target = path / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
@@ -293,11 +301,10 @@ class Experiment:
         argv = [sys.executable if v == "{python}" else v for v in argv]
         result = run_process(argv, workspace, log, self.timeout)
         if result.get("exit_code") == 0:
-            selected = set(ids)
+            selected = None if ids is None else set(ids)
             changed = []
-            for name, (data, _) in self.blobs.items():
-                if name in self.instruction_paths:
-                    data = ''.join(r.text for r in self.rules if r.path == name and r.id in selected).encode('utf-8')
+            for name in self.blobs:
+                data = self._workspace_content(name, selected)
                 target = workspace / name
                 if target.is_symlink() or not target.resolve().is_relative_to(workspace.resolve()) or not target.is_file() or target.read_bytes() != data:
                     changed.append(name)
@@ -347,11 +354,12 @@ class Experiment:
             (artifact / 'changes.diff').write_text(''.join(diffs), encoding='utf-8')
         return changes
 
-    def trial(self, ids: list[int], phase: str) -> dict:
+    def trial(self, ids: list[int] | None, phase: str) -> dict:
         number = len(self.report["trials"]) + 1
         artifact = self.out / "trials" / f"{number:04d}"
         artifact.mkdir()
-        record = {"number": number, "ids": ids, "phase": phase, "outcome": "error",
+        recorded_ids = [r.id for r in self.rules] if ids is None else ids
+        record = {"number": number, "ids": recorded_ids, "phase": phase, "outcome": "error",
                   "artifacts": f"trials/{number:04d}", "state": "started"}
         self.report["trials"].append(record)
         (artifact / "trial.json").write_text(json.dumps(record, indent=2) + "\n")
@@ -403,7 +411,7 @@ class Experiment:
         if self.progress is not None:
             self.progress(record)
         else:
-            print(f"  run {number}/{self.max_runs}: {phase}, {len(ids)} units -> {record['outcome']}", flush=True)
+            print(f"  run {number}/{self.max_runs}: {phase}, {len(recorded_ids)} units -> {record['outcome']}", flush=True)
         return record
 
     def evaluate(self, ids: list[int], phase: str = "search", fresh: bool = False) -> str:
