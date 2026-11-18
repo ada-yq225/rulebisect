@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0 / Skill and plugin 0.5.0 — Git instruction reviews
+
+- Run `rulebisect review` to see how selected working rules differ from HEAD. Use local revisions or a proposed directory, inspect the unified diff, and preview case selection and planned calls in the terminal, JSON or offline HTML.
+- Carry the reviewed inputs into a real comparison with pinned commit IDs and a fingerprint checked before trials. Both arms use the same current code and verification criteria.
+- Create a small editable project with `rulebisect tutorial my-rule-review --open`. It includes a committed baseline, a proposed edit and two independent cases.
+- Record the rule sources, content hashes and changed-line counts with comparison evidence.
+
 ## 0.10.0 / Skill and plugin 0.4.0
 
 - Download `rulebisect.pyz` and run the full CLI with Python 3.11+ and Git. Portable status and guided setup print commands that use the downloaded file.

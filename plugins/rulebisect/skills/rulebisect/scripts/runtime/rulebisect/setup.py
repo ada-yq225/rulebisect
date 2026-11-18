@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -16,7 +17,18 @@ from .configuration import load_configuration
 CONFIG_NAME = '.rulebisect.json'
 
 
+def check_git_environment() -> None:
+    """Require repository discovery and fresh trial workspaces to use their own Git state."""
+    repository_overrides = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE',
+                            'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES')
+    active = [name for name in repository_overrides if name in os.environ]
+    if active:
+        raise ValueError('Unset these Git environment overrides before running RuleBisect: '
+                         + ', '.join(active) + '. Then retry with --repo PATH.')
+
+
 def git_root(path: Path) -> Path:
+    check_git_environment()
     result = subprocess.run(['git', '-c', 'core.fsmonitor=false', 'rev-parse', '--show-toplevel'],
                             cwd=path, capture_output=True, text=True, timeout=10)
     if result.returncode:

@@ -91,6 +91,22 @@ Supply exactly one of `--check "COMMAND"`, `--oracle verifier.py`, or `--asserti
 
 `rulebisect case remove modern-labels` removes the case entry and **preserves its verifier files**. Keep at least one case for an already-working behavior, alongside the original failure.
 
+### Review Git instructions
+
+For a ready-to-edit project, run `rulebisect tutorial my-rule-review --open` with a new directory name. It creates a local Git repository with a committed baseline, modified working-copy rules and two configured cases. Inside that directory, edit the instructions and run `rulebisect review --open` to review the change again. The tutorial uses zero model calls.
+
+In your own repository, configure a task and edit its tracked instruction file. The default review compares `HEAD` with the current working copy. All of these previews use zero model calls:
+
+```sh
+rulebisect review --diff
+rulebisect review --base-ref HEAD~1 --proposed-ref HEAD --cases legacy-labels --json
+rulebisect review --html ../rule-review.html --open
+```
+
+Choose case IDs from `rulebisect case list`. A review reads local Git objects and the current configuration. Only the instruction contents come from the revisions. Both sides share the current code, setup and verifier snapshot. Every selected instruction must exist under the same path in the current snapshot and each selected source. Additions, deletions and renames across the selected sources require a different selection. For a proposal already saved in a directory, use `--proposed DIRECTORY` in place of `--proposed-ref REF`.
+
+A plain review leaves the repository and evidence directories untouched. For an HTML copy choose a new file outside the repository. Review the diff, cases and call count, then use the printed comparison command when you intend to run Codex. It pins Git revisions to commit IDs and carries the reviewed input fingerprint in `--expect-inputs`. If the snapshot, verification criteria, scope or budgets change, generate a fresh review. The model is selected separately.
+
 ### Compare a proposed instruction change
 
 ```sh
@@ -206,6 +222,22 @@ rulebisect check --all --open
 每个案例在 `--check "命令"`、`--oracle verifier.py`、`--assertions checks.json` 中选一项。命令不会经过 shell 展开，不支持管道；多步骤放进脚本。Python 验证器必须位于仓库内。案例命令支持 `--repo PATH` 和 `--config PATH`。
 
 `rulebisect case remove modern-labels` 只删除案例配置，**保留验证器文件**。除了原始失败任务，建议保留一个当前能正常工作的任务，用来发现修改后的回归。
+
+### 审查 Git 中的规则
+
+初次尝试可运行 `rulebisect tutorial my-rule-review --open`，指定一个新目录生成本地 Git 仓库。示例包含已提交的基线、工作区规则改动和两个用例。进入目录修改规则，再用 `rulebisect review --open` 查看自己的改动。教程的模型调用数为零。
+
+在自己的仓库中配置任务后，编辑已由 Git 跟踪的指令文件。`review` 默认比较 `HEAD` 与工作区的规则。以下命令都只预览，模型调用数为零：
+
+```sh
+rulebisect review --diff
+rulebisect review --base-ref HEAD~1 --proposed-ref HEAD --cases legacy-labels --json
+rulebisect review --html ../rule-review.html --open
+```
+
+用 `rulebisect case list` 查看可选用例。Git 版本提供指令内容，两边共用当前代码、环境配置和验证器。每个选中的指令路径必须同时存在于当前快照及所选的两个来源中。涉及新增、删除或改名时，请改选两边都存在的路径。如果提案已保存在目录中，可用 `--proposed 目录` 替代 `--proposed-ref 版本`。
+
+普通预览只读。要保存 HTML，请在仓库外指定一个新文件。核对差异、用例和预计调用次数后，可复制输出的命令运行 Codex。命令把 Git 版本固定为提交 ID，并用 `--expect-inputs` 核对预览时的输入。快照、验收条件、范围或预算变化后，请重新预览。模型可在运行实验时单独指定。
 
 ### 先小范围试跑，再检查全部案例
 

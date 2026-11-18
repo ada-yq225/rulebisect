@@ -266,6 +266,28 @@ class SkillPackageTests(unittest.TestCase):
         self.assert_ok(result)
         self.assertEqual(result.stdout.strip(), self.version())
 
+    def test_extracted_review_command_reuses_its_launcher_from_another_directory(self):
+        for name, skill_only in [('standalone skill', True), ('full plugin', False)]:
+            with self.subTest(distribution=name):
+                archive = self.archive(f'{name}.zip', skill_only=skill_only)
+                outside = self.extract(archive, name=name)
+                relative = builder.LAUNCHER.relative_to(builder.SKILL) if skill_only else builder.LAUNCHER
+                repo = self.root / f'{name} tutorial'
+                self.assert_ok(self.launch(relative, 'tutorial', repo, cwd=outside))
+                review = self.launch(relative, 'review', '--repo', repo, '--json', cwd=outside)
+                self.assert_ok(review)
+                plan = json.loads(review.stdout)
+                follow_up = plan['next_argv']
+                self.assertTrue(Path(follow_up[0]).is_absolute())
+                self.assertEqual(Path(follow_up[0]).resolve(), Path(sys.executable).resolve())
+                self.assertEqual(follow_up[1:6], ['-I', '-X', 'utf8', str(outside / relative), 'compare'])
+                follow_up.remove('--open')
+                checked = subprocess.run([*follow_up, '--plan'], cwd=self.root,
+                                         capture_output=True, encoding='utf-8', timeout=60)
+                self.assert_ok(checked)
+                self.assertEqual(json.loads(checked.stdout)['review_fingerprint'], plan['review_fingerprint'])
+                self.assertFalse(Path(plan['output']).exists())
+
     def test_launcher_preserves_quoted_task_backslashes_and_empty_arguments(self):
         outside = self.extract(self.archive())
         launcher = outside / builder.LAUNCHER

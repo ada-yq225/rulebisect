@@ -13,11 +13,18 @@ from .history import history
 from .setup import CONFIG_NAME, doctor
 
 
+# Set by the isolated Skill/plugin process after it validates its bundled engine.
+skill_launcher: Path | None = None
+
+
 def cli_prefix() -> list[str]:
     """Return a runnable CLI for the distribution that generated this advice."""
+    launcher = skill_launcher
     if isinstance(__loader__, zipimporter):
-        return [sys.executable, '-I', '-X', 'utf8', str(Path(__loader__.archive).resolve())]
-    return ['rulebisect']
+        launcher = Path(__loader__.archive).resolve()
+    if launcher is None:
+        return ['rulebisect']
+    return [sys.executable, '-I', '-X', 'utf8', str(launcher)]
 
 
 def format_command(arguments: list[str]) -> str:

@@ -10,7 +10,7 @@ Permanently free · MIT licensed · Codex only · Local-first · No telemetry. A
 
 ## See what it does — no Codex account needed
 
-Download [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect.pyz) and open a terminal in the download folder. The single file runs with Python 3.11+ and Git.
+Download [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect.pyz) and open a terminal in the download folder. The single file runs with Python 3.11+ and Git.
 
 **macOS or Linux**
 
@@ -27,6 +27,26 @@ py -3.11 -I rulebisect.pyz demo --scenario regression --open
 The report shows a proposed rule that fixes modern labels but breaks legacy labels. The demo uses eight deterministic simulations and zero model calls. It prints the path to `report.html` so you can reopen it. Change `regression` to `fix` to see both tasks pass. Catching the expected regression makes the demo exit 0. A real `compare` exits 2 on a regression.
 
 For your own project, follow the [repository quick start](docs/QUICKSTART.md#english). If you prefer to work inside Codex, install the Skill below.
+
+## Review the rules you just edited
+
+Try an editable example using a new directory name:
+
+```sh
+rulebisect tutorial my-rule-review --open
+```
+
+This creates a local Git repository with a committed baseline, a working-copy rule change and two configured cases. The offline review opens in your browser. Edit the rules in `my-rule-review`, then run `rulebisect review --open` inside it to review your edits. The tutorial requires Python 3.11+ and Git and uses zero model calls.
+
+In your own configured repository, edit a selected, tracked instruction file and run:
+
+```sh
+rulebisect review --diff
+```
+
+The review compares the selected instructions in `HEAD` with your working copy, shows the affected files, selected cases and planned calls, then prints a command for running the comparison. The preview uses zero model calls. With the single-file download, run `python3 -I /path/to/rulebisect.pyz review --diff` from your project.
+
+To review two local revisions, use `rulebisect review --base-ref main --proposed-ref feature/rules`. Both sides use today's code and verifiers. For case selection, HTML export and how the comparison checks the reviewed inputs, see the [quick start](docs/QUICKSTART.md#review-git-instructions).
 
 ## Use as a Codex Skill
 
@@ -70,12 +90,12 @@ The initial check reports missing output as a behavior failure. Setup and verifi
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.10.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.10.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.11.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.11.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect-0.10.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect-0.11.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -200,6 +220,7 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 | `run` | Run baseline, reduction and fresh confirmation | Yes |
 | `resume --from EVIDENCE` | Reuse matching stable search evidence in a new output directory | Yes |
 | `draft --out DIRECTORY` | Make an editable instruction copy; preserve the original baseline | No |
+| `review [--base-ref REF] [--proposed-ref REF]` | Preview Git instruction changes, cases and calls | No |
 | `compare --proposed DIRECTORY` | Repeat before/after checks across one task or a regression suite | Yes |
 | `compare --proposed DIRECTORY --plan` | Validate the suite and show exact planned calls | No |
 | `history` | Find previous runs without remembering paths | No |

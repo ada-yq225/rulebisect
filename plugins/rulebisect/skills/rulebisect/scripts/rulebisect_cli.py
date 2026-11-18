@@ -55,7 +55,7 @@ RUNTIME_MODULES = (
     '__init__.py', '__main__.py', 'assertions.py', 'checks.py', 'cli.py',
     'comparison.py', 'configuration.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
     'onboarding.py', 'report.py', 'report_ui.py', 'runner.py', 'setup.py',
-    'share.py', 'status.py', 'suite.py', 'ui.py',
+    'review.py', 'revisions.py', 'share.py', 'status.py', 'suite.py', 'tutorial.py', 'ui.py',
 )
 
 
@@ -94,10 +94,13 @@ def main(argv=None) -> int:
         import rulebisect
         if Path(rulebisect.__file__).resolve() != runtime / 'rulebisect' / '__init__.py':
             raise ValueError('A different RuleBisect engine is already loaded; launch this script in a fresh Python process')
+        from rulebisect import status
         from rulebisect.cli import main as engine_main
     except (ImportError, OSError, ValueError) as error:
         print(f'rulebisect skill: {error}', file=sys.stderr)
         return 2
+    if __name__ == '__main__':
+        status.skill_launcher = Path(__file__).resolve()
     return engine_main(sys.argv[1:] if argv is None else argv)
 
 

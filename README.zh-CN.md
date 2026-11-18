@@ -10,7 +10,7 @@
 
 ## 先看效果：无需 Codex 账户
 
-下载 [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect.pyz)，在下载目录打开终端。有 Python 3.11 或更高版本和 Git，就能直接运行这个文件。
+下载 [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect.pyz)，在下载目录打开终端。有 Python 3.11 或更高版本和 Git，就能直接运行这个文件。
 
 **macOS 或 Linux**
 
@@ -27,6 +27,26 @@ py -3.11 -I rulebisect.pyz demo --scenario regression --open
 打开报告，可以看到同一条新规则让新版标签通过检查，却让旧版标签失败。演示执行 8 次确定性模拟，模型调用为零。终端会打印 `report.html` 的路径，方便再次打开。把 `regression` 换成 `fix`，可以看到缩小规则适用范围后，两项检查都通过。演示发现预设回归时退出码为 0。真实 `compare` 发现回归时退出码为 2。
 
 要检查自己的项目，可以按照[仓库快速上手指南](docs/QUICKSTART.md#中文)配置第一个任务。如果习惯在 Codex 对话里操作，可安装下面的 Skill。
+
+## 审查刚改过的规则
+
+可以先指定一个新目录，创建可编辑的练习项目：
+
+```sh
+rulebisect tutorial my-rule-review --open
+```
+
+这个本地 Git 仓库包含一次基线提交、工作区的规则改动和两个已配置的用例。浏览器会打开离线审查页。编辑 `my-rule-review` 中的规则，在该目录再次运行 `rulebisect review --open` 即可查看自己的改动。教程只需 Python 3.11+ 和 Git，模型调用数为零。
+
+在自己的已配置仓库中，修改一个已选中且由 Git 跟踪的指令文件，然后运行：
+
+```sh
+rulebisect review --diff
+```
+
+它会对照 `HEAD` 与工作区中的规则，列出改动文件、所选用例和预计调用次数，再给出运行对照实验的命令。预览的模型调用数为零。使用单文件版时，在项目目录运行 `python3 -I /实际路径/rulebisect.pyz review --diff`。
+
+要审查两个本地版本的规则，可运行 `rulebisect review --base-ref main --proposed-ref feature/rules`。两边都使用当前的代码和验证器。用例筛选、HTML 导出和输入核对见[快速上手](docs/QUICKSTART.md#审查-git-中的规则)。
 
 ## 作为 Codex Skill 使用
 
@@ -70,12 +90,12 @@ codex plugin marketplace add ada-yq225/rulebisect
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.10.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.10.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.11.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.11.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.10.0/rulebisect-0.10.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect-0.11.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -220,6 +240,7 @@ rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
 | `run` | 重复运行、删减指令、重新确认 | 是 |
 | `resume --from 旧报告目录` | 复用匹配快照的稳定搜索结果，重新运行基线与最终确认 | 是 |
 | `draft --out 目录` | 复制指令供修改，保持原仓库规则作为基线 | 否 |
+| `review [--base-ref 版本] [--proposed-ref 版本]` | 预览 Git 规则修改、用例和调用次数 | 否 |
 | `compare --proposed 目录` | 对比规则修改前后的任务结果 | 是 |
 | `compare --proposed 目录 --plan` | 检查回归用例并显示计划调用数 | 否 |
 | `history` | 找回历史实验，不用记报告路径 | 否 |

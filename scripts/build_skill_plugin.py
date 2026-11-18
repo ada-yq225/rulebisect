@@ -22,7 +22,7 @@ MODULES = (
     '__init__.py', '__main__.py', 'assertions.py', 'checks.py', 'cli.py',
     'comparison.py', 'configuration.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
     'onboarding.py', 'report.py', 'report_ui.py', 'runner.py', 'setup.py',
-    'share.py', 'status.py', 'suite.py', 'ui.py',
+    'review.py', 'revisions.py', 'share.py', 'status.py', 'suite.py', 'tutorial.py', 'ui.py',
 )
 PLUGIN = Path('plugins/rulebisect')
 SKILL = Path('skills/rulebisect')

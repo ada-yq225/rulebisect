@@ -17,13 +17,13 @@ from .suite import add_case, list_cases, remove_case
 from .assertions import validate_assertions
 from .share import export_summary
 from .history import history, latest_report
-from .status import format_command, print_status, workspace_status
+from .status import cli_prefix, format_command, print_status, workspace_status
 from .core import split_rules
 from .demo import run_demo, run_comparison_demo
 from .experiment import Experiment
 from .report import write_report
 from .report_ui import artifact_path
-from .setup import CONFIG_NAME, _repository_file, discover_instructions, doctor, draft_instructions, git_root, init_config, snapshot_warnings
+from .setup import CONFIG_NAME, _repository_file, check_git_environment, discover_instructions, doctor, draft_instructions, git_root, init_config, snapshot_warnings
 
 
 def default_output(repo: Path, purpose='run') -> Path:
@@ -76,7 +76,7 @@ def experiment_from(args):
     config = load_configuration(config_path)
     if args.unit_mode:
         config['unit_mode'] = args.unit_mode
-    if args.command == 'compare' or (args.command == 'check' and getattr(args, 'all', False)):
+    if args.command in ('review', 'compare') or (args.command == 'check' and getattr(args, 'all', False)):
         config = select_cases(config, getattr(args, 'cases', None))
     model = args.model or config.get('model')
     repeats = args.repeats if args.repeats is not None else config.get('repeats', 3)
@@ -87,10 +87,69 @@ def experiment_from(args):
     resume_from = latest_report(repo, resumable=True) if args.command == 'resume' and getattr(args, 'latest', False) else getattr(args, 'from_report', None)
     if resume_from is not None and resume_from.is_file():
         resume_from = resume_from.parent
-    if args.command == 'compare':
-        return Comparison(repo, config, out, model, repeats, max_runs, timeout, args.candidate, max_tokens=max_tokens)
+    if args.command in ('review', 'compare'):
+        return Comparison(repo, config, out, model, repeats, max_runs, timeout, args.candidate,
+                          max_tokens=max_tokens, base_ref=args.base_ref, proposed_ref=args.proposed_ref,
+                          expected_inputs=getattr(args, 'expect_inputs', None))
     return Experiment(repo, config, out, model, repeats, max_runs, timeout,
                       resume_from=resume_from, max_tokens=max_tokens)
+
+
+def review_workspace(args, comparison):
+    from .review import render_review, review_text
+
+    plan = comparison.prepare()
+    sources = plan['instruction_sources']
+    command = [*cli_prefix(), 'compare', '--repo', str(comparison.repo)]
+    if args.config:
+        command += ['--config', str(args.config.resolve())]
+    if sources['baseline']['kind'] == 'git':
+        command += ['--base-ref', sources['baseline']['commit']]
+    if sources['candidate']['kind'] == 'git':
+        command += ['--proposed-ref', sources['candidate']['commit']]
+    elif args.candidate:
+        command += ['--proposed', str(args.candidate.resolve())]
+    if args.cases:
+        command += ['--cases', *args.cases]
+    for flag in ('repeats', 'timeout', 'max_runs', 'max_tokens', 'unit_mode'):
+        value = getattr(args, flag)
+        if value is not None:
+            command += ['--' + flag.replace('_', '-'), str(value)]
+    command += ['--out', str(comparison.out), '--expect-inputs', plan['review_fingerprint'], '--model', comparison.model or 'YOUR_CODEX_MODEL_ID', '--open']
+    plan['next_argv'] = command
+    formatted = format_command(command)
+    diff = comparison.instruction_diff() if args.html or args.open or args.diff else ''
+    html = args.html
+    if args.open and html is None:
+        html = comparison.repo.parent / f'rulebisect-review-{datetime.now():%Y%m%d-%H%M%S-%f}.html'
+    if html:
+        html = html.absolute()
+        if html.suffix.lower() != '.html' or html.resolve().is_relative_to(comparison.repo):
+            raise ValueError('Choose a new .html file outside the target repository.')
+        if html.resolve().is_relative_to(comparison.out):
+            raise ValueError('Save the review outside the planned comparison evidence directory.')
+        page = render_review(plan, diff, formatted)
+        stream = html.open('x', encoding='utf-8', newline='\n')
+        try:
+            with stream:
+                stream.write(page)
+        except BaseException:
+            html.unlink(missing_ok=True)
+            raise
+        plan['html'] = str(html)
+    if args.json:
+        if args.diff:
+            plan['diff'] = diff
+        print(json.dumps(plan, ensure_ascii=False, indent=2))
+    else:
+        print(review_text(plan, formatted))
+        if args.diff:
+            print(diff or 'Selected instruction contents are identical.')
+        if html:
+            print(f'Review: {html}')
+    if args.open:
+        webbrowser.open(html.as_uri())
+    return 0
 
 
 def main(argv=None) -> int:
@@ -99,6 +158,8 @@ def main(argv=None) -> int:
         command = format_command(['rulebisect'])
         print(f'RuleBisect {__version__} — debug Codex rules and catch instruction regressions.\n'
               f'\nTry a simulation:  {command} demo --scenario regression --open\n'
+              f'Edit a sample project: {command} tutorial my-rule-review --open\n'
+              f'Review local rule edits: {command} review --open\n'
               f'See your next step: {command} status\n'
               f'Set up a task:      {command} init --wizard\n'
               f'All commands:       {command} --help\n'
@@ -165,10 +226,24 @@ def main(argv=None) -> int:
     render.add_argument('--open', action='store_true')
     compare = commands.add_parser('compare', help='Validate proposed instructions against one or more tasks before applying')
     add_experiment_options(compare)
-    compare.add_argument('--proposed', '--candidate', dest='candidate', type=Path, required=True, help='Directory containing replacements at the selected instruction paths')
     compare.add_argument('--plan', action='store_true', help='Validate and show exact planned calls without Codex or artifacts')
-    compare.add_argument('--open', action='store_true')
-    compare.add_argument('--cases', nargs='+', help='Run only these case ids; omitted tasks remain explicitly untested')
+    compare.add_argument('--expect-inputs', metavar='SHA256', help='Require the same snapshot, cases and settings as a saved review')
+    review = commands.add_parser('review', help='Preview a Git instruction change and plan a comparison without calling Codex')
+    add_experiment_options(review)
+    review.add_argument('--json', action='store_true', help='Emit machine-readable plan and follow-up argv')
+    review.add_argument('--diff', action='store_true', help='Include the unified instruction diff in terminal or JSON output')
+    review.add_argument('--html', type=Path, help='Save a standalone review to a new .html file outside the target repository')
+    for action in (review, compare):
+        action.add_argument('--base-ref', default='HEAD' if action is review else None,
+                            help='Git revision for baseline instructions (review defaults to HEAD)')
+        variant = action.add_mutually_exclusive_group()
+        variant.add_argument('--proposed', '--candidate', dest='candidate', type=Path, help='Directory containing replacement instructions')
+        variant.add_argument('--proposed-ref', help='Git revision for candidate instructions; with --base-ref the default candidate is the working tree')
+        action.add_argument('--open', action='store_true', help='Open the local HTML page')
+        action.add_argument('--cases', nargs='+', help='Select cases to compare')
+    tutorial = commands.add_parser('tutorial', help='Create an editable sample Git project with a two-case instruction review')
+    tutorial.add_argument('directory', nargs='?', type=Path, default=Path('my-rule-review'), help='New project directory')
+    tutorial.add_argument('--open', action='store_true', help='Open its offline review')
     case = commands.add_parser('case', help='Save, list and remove regression cases without editing JSON')
     case_commands = case.add_subparsers(dest='case_command', required=True)
     for name in ('list', 'add', 'remove'):
@@ -197,6 +272,13 @@ def main(argv=None) -> int:
     hist.add_argument('--json', action='store_true')
     args = parser.parse_args(argv)
     try:
+        if args.command in ('demo', 'tutorial'):
+            check_git_environment()
+        if args.command == 'tutorial':
+            from .tutorial import create_tutorial
+            project = create_tutorial(args.directory)
+            print(f'Tutorial project: {project}\nEdit {project / "AGENTS.md"} to try another proposal.')
+            return main(['review', '--repo', str(project), *(['--open'] if args.open else [])])
         if args.command == 'status':
             result = workspace_status(args.repo, args.config)
             if args.json:
@@ -335,6 +417,8 @@ def main(argv=None) -> int:
         else:
             experiment = experiment_from(args)
             out = experiment.out
+            if args.command == 'review':
+                return review_workspace(args, experiment)
             if args.command == 'compare' and args.plan:
                 print(json.dumps(experiment.prepare(), ensure_ascii=False, indent=2))
                 return 0

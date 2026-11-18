@@ -100,7 +100,15 @@ def comparison_html(out, report, trials):
     table = ('<div class="panel table-wrap"><table class="comparison-matrix"><caption class="sr-only">Before and after case outcomes / 用例对照</caption><thead><tr>' +
              ''.join(f'<th scope="col">{bilingual(en, zh)}</th>' for en, zh in [('Task', '任务'), ('Original', '原始'), ('Proposed', '拟议'), ('Verdict', '结果')]) +
              '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table></div>')
-    return '<section class="section" id="case-results">' + heading + table + '</section>'
+    sources = report.get('instruction_sources', {})
+    provenance = []
+    for arm, en, zh in [('baseline', 'Before', '原规则'), ('candidate', 'After', '新规则')]:
+        src = sources.get(arm, {})
+        if src.get('kind') == 'git':
+            provenance.append(bilingual(en, zh) + ' · ' + esc(src.get('ref', '')) +
+                              ' <code>' + esc(src.get('commit', '')) + '</code>')
+    origin = '<p class="section-note">' + '<br>'.join(provenance) + '</p>' if provenance else ''
+    return '<section class="section" id="case-results">' + heading + origin + table + '</section>'
 
 
 def checks_html(out, report):
