@@ -93,7 +93,7 @@ Supply exactly one of `--check "COMMAND"`, `--oracle verifier.py`, or `--asserti
 
 ### Review Git instructions
 
-For a ready-to-edit project, run `rulebisect tutorial my-rule-review --open` with a new directory name. It creates a local Git repository with a committed baseline, modified working-copy rules and two configured cases. Inside that directory, edit the instructions and run `rulebisect review --open` to review the change again. The tutorial uses zero model calls.
+Run `rulebisect tutorial my-rule-review --open` to create a local Git example in a new directory. The proposed rule lowercases both clients’ labels, trims surrounding whitespace for modern clients, and preserves it for legacy clients. Try `rulebisect tutorial broad-rule-review --proposal regression --open` to review a proposal that trims both. In either example, edit `AGENTS.md` and run `rulebisect review --open` from that directory to see your changes. The tutorial and review use zero model calls.
 
 In your own repository, configure a task and edit its tracked instruction file. The default review compares `HEAD` with the current working copy. All of these previews use zero model calls:
 
@@ -126,6 +126,17 @@ rulebisect compare --proposed ../proposed-rules --open
 ```
 
 Inspect regressions, remaining failures and uncertainty individually. Passing these repeated checks is finite evidence about these cases; it is not a guarantee on unseen tasks. RuleBisect does not apply instruction changes automatically. Keep the original instructions unchanged while comparing so the baseline is meaningful.
+
+### Finish a comparison stopped by its token limit
+
+From the original repository, preview the remaining trials with a higher **cumulative** reported-token limit. For the directory proposal used above:
+
+```sh
+rulebisect compare --continue-from ../partial-comparison --proposed ../proposed-rules --max-tokens 120000 --plan
+rulebisect compare --continue-from ../partial-comparison --proposed ../proposed-rules --max-tokens 120000 --out ../continued-comparison
+```
+
+Replace `../partial-comparison` with the evidence directory printed by the previous run. Pick a total that includes previously reported tokens. Use a new output directory. RuleBisect verifies the inputs, reuses completed trials and makes calls for the remainder. For a Git or working-tree proposal, omit `--proposed`. Git commits stay pinned. If you used a custom config, pass its `--config PATH` again.
 
 ### Choose the next command
 
@@ -225,7 +236,7 @@ rulebisect check --all --open
 
 ### 审查 Git 中的规则
 
-初次尝试可运行 `rulebisect tutorial my-rule-review --open`，指定一个新目录生成本地 Git 仓库。示例包含已提交的基线、工作区规则改动和两个用例。进入目录修改规则，再用 `rulebisect review --open` 查看自己的改动。教程的模型调用数为零。
+初次尝试可运行 `rulebisect tutorial my-rule-review --open`，在新目录生成本地 Git 仓库。默认提案要求两个客户端都将标签转成小写，现代客户端去掉首尾空白，旧版客户端保留空白。运行 `rulebisect tutorial broad-rule-review --proposal regression --open` 可查看对两个客户端一律去空白的提案。进入任一示例目录，修改 `AGENTS.md`，再用 `rulebisect review --open` 查看自己的改动。教程和审查均不调用模型。
 
 在自己的仓库中配置任务后，编辑已由 Git 跟踪的指令文件。`review` 默认比较 `HEAD` 与工作区的规则。以下命令都只预览，模型调用数为零：
 
@@ -258,6 +269,19 @@ rulebisect compare --proposed ../proposed-rules --open
 ```
 
 逐项查看改善、回归、仍然失败和不确定的结果。重复通过只支持这些案例的有限观察，不能保证其他任务。工具不会自动应用指令修改；对比期间保留仓库原始指令，确保基线有意义。
+
+### 对照实验达到 Token 上限后继续
+
+在原仓库中使用更高的**累计** Token 上限，先预览还需运行哪些试验。沿用上面的目录提案，可执行以下命令。
+
+```sh
+rulebisect compare --continue-from ../partial-comparison --proposed ../proposed-rules --max-tokens 120000 --plan
+rulebisect compare --continue-from ../partial-comparison --proposed ../proposed-rules --max-tokens 120000 --out ../continued-comparison
+```
+
+将 `../partial-comparison` 换成上一轮输出的证据目录，总上限需包含之前已上报的 Token。指定新的输出目录后，工具会核对原始输入、复用已完成的试验，只为余下的试验调用模型。如果原来使用 Git 版本或工作区提案，省略 `--proposed` 即可，Git 版本会沿用记录的提交 ID。自定义配置需要再次指定原来的 `--config 路径`。
+
+### 选择下一步
 
 | 你遇到的问题 | 先运行什么 |
 |---|---|

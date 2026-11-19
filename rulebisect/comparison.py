@@ -12,7 +12,7 @@ from pathlib import Path
 from . import __version__
 from .core import StopSearch, digest
 from .experiment import Experiment
-from .report import token_totals, write_report
+from .report import TOKEN_STOP, token_totals, write_report
 from .revisions import read_revision
 
 
@@ -81,14 +81,46 @@ def load_candidate(root, instructions):
     return result
 
 
+def trial_schedule(cases, repeats):
+    for case in cases:
+        for repeat in range(repeats):
+            arms = ('baseline', 'candidate') if repeat % 2 == 0 else ('candidate', 'baseline')
+            for arm in arms:
+                yield case, arm
+
+
+def update_case(case, arm, records, repeats):
+    counts = {key: sum(record['outcome'] == key for record in records) for key in ('pass', 'fail', 'error')}
+    if counts['error']:
+        outcome = 'error'
+    elif counts['pass'] and counts['fail']:
+        outcome = 'unstable'
+    elif len(records) == repeats:
+        outcome = records[-1]['outcome']
+    else:
+        outcome = 'incomplete'
+    totals = token_totals({'trials': records})
+    case[arm] = {**counts, 'outcome': outcome, 'reported_tokens': totals['input_tokens'] + totals['output_tokens'],
+                 'usage_reported_runs': totals['reported_runs']}
+    before = (case['baseline'] or {}).get('outcome')
+    after = (case['candidate'] or {}).get('outcome')
+    if before in ('pass', 'fail') and after in ('pass', 'fail'):
+        verdicts = {('pass', 'fail'): 'regression', ('fail', 'pass'): 'improvement',
+                    ('pass', 'pass'): 'unchanged_pass', ('fail', 'fail'): 'unchanged_fail'}
+        case['verdict'] = verdicts[before, after]
+    return outcome
+
+
 class Comparison:
     def __init__(self, repo, config, out, model, repeats, max_runs, timeout,
-                 candidate=None, max_tokens=None, runner=None, *, base_ref=None, proposed_ref=None, expected_inputs=None):
+                 candidate=None, max_tokens=None, runner=None, *, base_ref=None, proposed_ref=None, expected_inputs=None, continue_from=None):
         self.repo, self.config, self.out = repo.resolve(), config, out.resolve()
         self.model, self.repeats, self.max_runs, self.timeout = model, repeats, max_runs, timeout
         self.candidate, self.max_tokens, self.runner = candidate, max_tokens, runner
         self.base_ref, self.proposed_ref = base_ref, proposed_ref
         self.expected_inputs = expected_inputs
+        self.continue_from = continue_from
+        self.checkpoint = None
         if candidate is not None and proposed_ref is not None:
             raise ValueError('Choose one candidate source: --proposed DIRECTORY or --proposed-ref REV.')
         if candidate is None and base_ref is None and proposed_ref is None:
@@ -136,7 +168,7 @@ class Comparison:
         self._patch = ''.join(patch)
         return changes
 
-    def _review_fingerprint(self, baseline, candidate, cases, selection):
+    def _review_fingerprint(self, baseline, candidate, cases, selection, version, max_tokens):
         """Identify effective comparison inputs independent of their source labels."""
         checks = []
         for name, _ in cases:
@@ -144,13 +176,13 @@ class Comparison:
             checks.append({'id': name, 'task': frozen['task'], 'oracle': frozen['oracle'],
                            'verify': frozen['verify'], 'setup': frozen['setup'],
                            'protected_files': sorted(frozen['protected_files'])})
-        inputs = {'format': 1, 'engine_version': __version__,
+        inputs = {'format': 1, 'engine_version': version,
                   'baseline_snapshot': baseline.report['snapshot_sha256'],
                   'candidate_snapshot': candidate.report['snapshot_sha256'],
                   'instruction_files': baseline.instruction_paths, 'case_selection': selection,
                   'checks': checks, 'unit_mode': baseline.report['unit_mode'],
                   'repeats': self.repeats, 'timeout': self.timeout,
-                  'max_runs': self.max_runs, 'max_tokens': self.max_tokens}
+                  'max_runs': self.max_runs, 'max_tokens': max_tokens}
         return digest(json.dumps(inputs, sort_keys=True, separators=(',', ':')).encode('utf-8'))
 
     def instruction_diff(self) -> str:
@@ -209,13 +241,22 @@ class Comparison:
                            required_calls=required, candidate_instruction_hashes={name: digest(value[0]) for name, value in self.experiments[cases[0][0], 'candidate'].blobs.items() if name in first.instruction_paths})
         self.report['case_selection'] = copy.deepcopy(self.config.get('_case_selection',
             {'available': [name for name, _ in cases], 'selected': [name for name, _ in cases], 'omitted': []}))
-        fingerprint = self._review_fingerprint(first, candidate, cases, self.report['case_selection'])
+        def fingerprint_for(version, max_tokens):
+            return self._review_fingerprint(first, candidate, cases, self.report['case_selection'], version, max_tokens)
+
+        fingerprint = fingerprint_for(__version__, self.max_tokens)
         if self.expected_inputs is not None and self.expected_inputs != fingerprint:
             raise ValueError('Reviewed inputs changed; run rulebisect review again.')
         self.report['review_fingerprint'] = fingerprint
         for name, config in cases:
             self.report['cases'].append({'id': name, 'task': config['task'], 'oracle': config['oracle'], 'baseline': None, 'candidate': None, 'verdict': 'pending'})
-        return {'cases': [name for name, _ in cases], 'variants': ['baseline', 'candidate'],
+        continuation = {}
+        if self.continue_from is not None:
+            from .comparison_resume import load_checkpoint
+            self.checkpoint = load_checkpoint(self, fingerprint_for, check_codex)
+            continuation = {'continuation': self.checkpoint.metadata}
+            self.report.update(continuation)
+        return {**continuation, 'cases': [name for name, _ in cases], 'variants': ['baseline', 'candidate'],
                 'instruction_files': first.instruction_paths, 'required_calls': required,
                 'max_runs': self.max_runs, 'max_tokens': self.max_tokens, 'model': self.model,
                 'snapshot_sha256': first.report['snapshot_sha256'], 'candidate_snapshot_sha256': candidate_hash,
@@ -240,8 +281,19 @@ class Comparison:
 
     def execute(self):
         self.prepare(check_codex=True)
+        self.out.mkdir(parents=True, exist_ok=True)
+        # Claim the permanent cases directory atomically. Two preparations can
+        # both see an empty output; only its owner may materialize or run trials.
+        if any(self.out.iterdir()):
+            raise ValueError('Comparison output is already in use; choose a new empty directory')
+        try:
+            (self.out / 'cases').mkdir()
+        except FileExistsError:
+            raise ValueError('Comparison output is already in use; choose a new empty directory') from None
         for exp in self.experiments.values():
             exp.materialize()
+        if self.checkpoint is not None:
+            self.checkpoint.restore(self)
         proposed = next(exp for (name, arm), exp in self.experiments.items() if arm == 'candidate')
         for name in proposed.instruction_paths:
             target = self.out / 'proposed' / name
@@ -251,31 +303,22 @@ class Comparison:
         self.report['status'] = 'running'
         write_report(self.out, self.report)
         try:
-            for case in self.report['cases']:
-                observations = {'baseline': [], 'candidate': []}
-                usage = {'baseline': [], 'candidate': []}
-                for repeat in range(self.repeats):
-                    # Alternate arm order to reduce a systematic first/last timing bias.
-                    arms = ('baseline', 'candidate') if repeat % 2 == 0 else ('candidate', 'baseline')
-                    for arm in arms:
-                        totals = token_totals(self.report)
-                        if self.max_tokens is not None and totals['input_tokens'] + totals['output_tokens'] >= self.max_tokens:
-                            raise StopSearch('Reported token cap reached before the next call; comparison incomplete. Not a billing cap.')
-                        if len(self.report['trials']) >= self.max_runs:
-                            raise StopSearch('Execution cap reached; comparison incomplete.')
-                        record = self.record_trial(self.experiments[case['id'], arm], case['id'], arm)
-                        observations[arm].append(record['outcome'])
-                        usage[arm].append(record)
-                        counts = {key: observations[arm].count(key) for key in ('pass', 'fail', 'error')}
-                        outcome = 'error' if counts['error'] else 'unstable' if counts['pass'] and counts['fail'] else observations[arm][0] if len(observations[arm]) == self.repeats else 'incomplete'
-                        totals = token_totals({'trials': usage[arm]})
-                        case[arm] = {**counts, 'outcome': outcome, 'reported_tokens': totals['input_tokens'] + totals['output_tokens'], 'usage_reported_runs': totals['reported_runs']}
-                        write_report(self.out, self.report)
-                        if outcome in ('error', 'unstable'):
-                            raise StopSearch(f'{case["id"]}/{arm}: {outcome}; no reliable before/after conclusion.')
-                before, after = case['baseline']['outcome'], case['candidate']['outcome']
-                case['verdict'] = 'regression' if (before, after) == ('pass', 'fail') else 'improvement' if (before, after) == ('fail', 'pass') else 'unchanged_pass' if after == 'pass' else 'unchanged_fail'
+            reused = len(self.report['trials'])
+            for index, (case, arm) in enumerate(trial_schedule(self.report['cases'], self.repeats)):
+                if index < reused:
+                    continue
+                totals = token_totals(self.report)
+                if self.max_tokens is not None and totals['input_tokens'] + totals['output_tokens'] >= self.max_tokens:
+                    self.report['stop_reason'] = 'token_cap'
+                    raise StopSearch(TOKEN_STOP)
+                if len(self.report['trials']) >= self.max_runs:
+                    raise StopSearch('Execution cap reached; comparison incomplete.')
+                exp = self.experiments[case['id'], arm]
+                self.record_trial(exp, case['id'], arm)
+                outcome = update_case(case, arm, exp.report['trials'], self.repeats)
                 write_report(self.out, self.report)
+                if outcome in ('error', 'unstable'):
+                    raise StopSearch(f'{case["id"]}/{arm}: {outcome}; no reliable before/after conclusion.')
             verdicts = [case['verdict'] for case in self.report['cases']]
             if 'regression' in verdicts:
                 self.report.update(status='regressions_observed', message='At least one previously passing task failed under the proposed instructions. Review before applying.')

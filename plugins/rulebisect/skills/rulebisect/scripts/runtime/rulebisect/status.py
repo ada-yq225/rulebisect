@@ -27,6 +27,17 @@ def cli_prefix() -> list[str]:
     return [sys.executable, '-I', '-X', 'utf8', str(launcher)]
 
 
+def _powershell_argument(value: str) -> str:
+    if re.fullmatch(r'[A-Za-z0-9_./:=+-]+', value):
+        return value
+    quoted = "'" + value.replace("'", "''") + "'"
+    # PowerShell treats smart quotes as delimiters too. Emit their code points
+    # outside the literal so the filename survives parsing byte for byte.
+    if re.search('[‘’‚‛]', value):
+        return '(' + re.sub('[‘’‚‛]', lambda m: f"' + [char]{ord(m[0])} + '", quoted) + ')'
+    return quoted
+
+
 def format_command(arguments: list[str]) -> str:
     """Format suggested commands for the platform's documented shell."""
     if arguments and arguments[0] == 'rulebisect':
@@ -36,8 +47,7 @@ def format_command(arguments: list[str]) -> str:
     # PowerShell single quotes preserve spaces, dollar signs and backticks.
     # A quoted executable path needs PowerShell's call operator.
     operator = '& ' if arguments and not re.fullmatch(r'[A-Za-z0-9_./:=+-]+', arguments[0]) else ''
-    return operator + ' '.join(value if re.fullmatch(r'[A-Za-z0-9_./:=+-]+', value)
-                    else "'" + value.replace("'", "''") + "'" for value in arguments)
+    return operator + ' '.join(_powershell_argument(value) for value in arguments)
 
 
 def workspace_status(repo: Path, config_path: Path | None = None) -> dict:

@@ -3,7 +3,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .report_ui import artifact_path, render_report
+from .report_ui import NEXT_EN, artifact_path, render_report
+from .status import format_command
+
+TOKEN_STOP = 'Reported token cap reached before the next call; comparison incomplete. Not a billing cap.'
+
+
+def token_cap_stop(report):
+    if report.get('kind') != 'comparison' or report.get('status') != 'inconclusive':
+        return False
+    if 'stop_reason' in report:
+        return report['stop_reason'] == 'token_cap'
+    return report.get('version') == '0.11.0' and report.get('message') == TOKEN_STOP
+
 
 STATUS = {
     'checks_completed': ('验证器已运行 / Checks completed', '验证器均返回 0 或 1；初始代码的行为失败可能符合预期。检查断言后再运行 Codex。'),
@@ -60,6 +72,43 @@ def selection_text(report):
             '. These tasks were not checked; passing results do not cover them.') if omitted else ''
 
 
+def next_step(out, report, action_zh):
+    status = report['status']
+    action_en = NEXT_EN.get(status, 'Review the recorded evidence.')
+    if report.get('kind') == 'checks' and status == 'interrupted':
+        return ('Rerun check --all in a new directory.', '在新目录重新执行 check --all。', '')
+    if report.get('kind') != 'comparison' or status not in ('inconclusive', 'interrupted'):
+        return action_en, action_zh, ''
+    cap = report.get('max_tokens')
+    if not token_cap_stop(report) or report.get('runner') != 'codex' or type(cap) is not int or cap <= 0:
+        return ('Inspect the case logs and start a fresh compare run in a new evidence directory.',
+                '检查用例日志，然后在新证据目录中重新执行 compare。', '')
+    usage = report['usage_totals']
+    minimum = max(cap, usage['input_tokens'] + usage['output_tokens'])
+    action_en = (f'From the original project, replace NEW_TOTAL with a total token limit above {minimum:,}. '
+                 'Run the plan to verify the checkpoint and see the remaining calls without invoking Codex.')
+    action_zh = (f'回到原项目，将 NEW_TOTAL 换成大于 {minimum:,} 的累计 Token 上限。'
+                 '运行计划以校验检查点并查看剩余调用数，模型调用为零。')
+    args = ['rulebisect', 'compare', '--continue-from', str(out.resolve()), '--max-tokens', 'NEW_TOTAL']
+    if report.get('instruction_sources', {}).get('candidate', {}).get('kind') == 'directory':
+        args += ['--proposed', 'ORIGINAL_PROPOSAL_DIRECTORY']
+        action_en += ' Set ORIGINAL_PROPOSAL_DIRECTORY to your original proposal directory.'
+        action_zh += ' 将 ORIGINAL_PROPOSAL_DIRECTORY 换成原提案目录。'
+    action_en += ' For a custom config, add --config PATH.'
+    action_zh += ' 使用自定义配置时加上 --config PATH。'
+    return action_en, action_zh, format_command([*args, '--plan'])
+
+
+def continuation_counts(report):
+    continuation = report.get('continuation')
+    if report.get('kind') == 'comparison' and isinstance(continuation, dict):
+        reused = continuation.get('reused_trials')
+        if type(reused) is int and 0 <= reused <= len(report['trials']):
+            fresh = len(report['trials']) - reused
+            return (f'{reused} reused · {fresh} newly recorded', f'沿用 {reused} 次 · 本轮新增 {fresh} 次')
+    return None
+
+
 def write_report(out: Path, report: dict) -> None:
     out.mkdir(parents=True, exist_ok=True)
     report['usage_totals'] = token_totals(report)
@@ -67,14 +116,17 @@ def write_report(out: Path, report: dict) -> None:
     kept = set(report.get('candidate', []))
     rules = report.get('rules', [])
     label, action = STATUS.get(report['status'], (report['status'], 'Review the evidence.'))
-    if report.get('kind') == 'comparison' and report['status'] in ('inconclusive', 'interrupted'):
-        action = '查看用例日志，调整验证器或预算后，在新目录重新执行 compare。本版对照实验不能续跑。'
-    if report.get('kind') == 'checks' and report['status'] == 'interrupted':
-        action = '在新目录重新执行 check --all；验证器检查不能续跑。'
+    action_en, action, command = next_step(out, report, action)
+    counts = continuation_counts(report)
+    guidance = [action_en, '', action] if report.get('kind') == 'comparison' else [action]
+    if command:
+        # Indent each line so a quoted local filename cannot close a Markdown fence.
+        guidance += ['', '\n'.join('    ' + line for line in command.split('\n'))]
     model_label = report.get('requested_model') or ('not invoked' if report.get('kind') in ('check', 'checks') else 'simulation')
     md = ['# RuleBisect experimental report', '', f"Status: **{report['status']}**", '', report['message'], '',
           f"Runner: {report['runner']} | Executions: {len(report['trials'])}/{report['max_runs']}", '',
-          f"Requested model: {model_label}", '', '## Next step', '', action, '',
+          *([' / '.join(counts), ''] if counts else []),
+          f"Requested model: {model_label}", '', '## Next step', '', *guidance, '',
           '## Task', '', report.get('task', ''), '',
           'These are finite observations, not proof of causation, statistical confidence or a globally smallest subset.', '',
           '## Retained instruction units', '']
@@ -113,4 +165,4 @@ def write_report(out: Path, report: dict) -> None:
     if selection_text(report):
         issue += ['', selection_text(report)]
     atomic_text(out / 'issue.md', '\n'.join(issue) + '\n')
-    atomic_text(out / 'report.html', render_report(out, report, label, action))
+    atomic_text(out / 'report.html', render_report(out, report, label, action, action_en, command, counts))

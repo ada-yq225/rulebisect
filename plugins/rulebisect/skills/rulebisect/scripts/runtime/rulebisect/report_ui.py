@@ -284,7 +284,7 @@ def report_tone(report):
     return 'neutral'
 
 
-def render_report(out, report, label, action):
+def render_report(out, report, label, action, action_en=None, command='', run_counts=None):
     kind = report.get('kind', 'reduction')
     checks = kind in ('check', 'checks')
     source = 'verifier_only' if checks else report.get('runner', 'unknown')
@@ -292,11 +292,7 @@ def render_report(out, report, label, action):
     source_en, source_zh = source_names.get(source, (source, source))
     title_en, title_zh = ('Instruction comparison', '指令修改对照') if kind == 'comparison' else ('Verifier checks', '验证器检查') if checks else ('Instruction investigation', '指令问题调查')
     zh_label, en_label = label.split(' / ', 1) if ' / ' in label else (label, label)
-    action_en = NEXT_EN.get(report['status'], 'Review the recorded evidence.')
-    if kind == 'comparison' and report['status'] in ('inconclusive', 'interrupted'):
-        action_en = 'Inspect case logs, adjust the verifier or budget, and rerun compare in a new directory. Comparisons cannot be resumed.'
-    if kind == 'checks' and report['status'] == 'interrupted':
-        action_en = 'Rerun check --all in a new directory. Verifier checks cannot be resumed.'
+    action_en = action_en or NEXT_EN.get(report['status'], 'Review the recorded evidence.')
     tone = report_tone(report)
     trials = trials_for_view(report)
     totals = report['usage_totals']
@@ -318,7 +314,8 @@ def render_report(out, report, label, action):
         first = metric('Cases checked', '已检查用例', f'{completed} <span class="metric-denominator">/ {len(cases)}</span>', bilingual('Selected cases only', '仅所选用例'), 'checks')
     else:
         first = metric('Candidate units', '候选指令', f'{len(kept)} <span class="metric-denominator">/ {len(rules)}</span>', bilingual('Failing reproducer, not a fix', '失败复现候选，不代表修复'), 'rules')
-    second = metric('Model calls' if checks else 'Recorded runs', '模型调用' if checks else '已记录运行', '0' if checks else f'{len(report["trials"])} <span class="metric-denominator">/ {report["max_runs"]}</span>', bilingual('No model invoked', '未调用模型') if checks else bilingual('Execution budget', '总执行预算'), 'activity')
+    run_detail = run_counts or (('No model invoked', '未调用模型') if checks else ('Execution budget', '总执行预算'))
+    second = metric('Model calls' if checks else 'Recorded runs', '模型调用' if checks else '已记录运行', '0' if checks else f'{len(report["trials"])} <span class="metric-denominator">/ {report["max_runs"]}</span>', bilingual(*run_detail), 'activity')
     if kind == 'comparison':
         bad = sum(c.get('verdict') == 'regression' for c in cases)
         third = metric('Regressed cases', '回退用例', esc(bad), bilingual(f'{sum(c.get("verdict") == "improvement" for c in cases)} improved cases', f'{sum(c.get("verdict") == "improvement" for c in cases)} 个改善用例'), 'compare')
@@ -328,7 +325,8 @@ def render_report(out, report, label, action):
     fourth = metric('Reported tokens', '已上报 Token', f'{totals["input_tokens"] + totals["output_tokens"]:,}' if totals['reported_runs'] else '—', bilingual(f'{totals["reported_runs"]} runs reported usage', f'{totals["reported_runs"]} 次运行上报用量') if totals['reported_runs'] else bilingual('Not reported · cost unknown', '未上报 · 费用未知'), 'activity')
     omitted = report.get('case_selection', {}).get('omitted', [])
     notice = '<div class="notice notice-warning">' + svg_icon('warning') + '<p>' + bilingual('Partial suite. Omitted cases were not checked: ', '仅检查所选用例。以下用例未检查：') + esc(', '.join(omitted)) + '</p></div>' if omitted else ''
-    hero = f'<div class="hero" data-tone="{tone}"><div class="hero-icon">{svg_icon("warning" if tone in ("danger", "warning") else "checks")}</div><div class="hero-copy"><h2>' + bilingual(en_label, zh_label) + '</h2><p>' + esc(report.get('message', '')) + '</p><div class="next-step"><strong>' + bilingual('Next step · ', '下一步 · ') + '</strong>' + bilingual(action_en, action) + '</div></div></div>'
+    next_command = f'<pre class="code-block" id="continuation-command">{esc(command)}</pre>' if command else ''
+    hero = f'<div class="hero" data-tone="{tone}"><div class="hero-icon">{svg_icon("warning" if tone in ("danger", "warning") else "checks")}</div><div class="hero-copy"><h2>' + bilingual(en_label, zh_label) + '</h2><p>' + esc(report.get('message', '')) + '</p><div class="next-step"><strong>' + bilingual('Next step · ', '下一步 · ') + '</strong>' + bilingual(action_en, action) + next_command + '</div></div></div>'
     overview = '<section class="section" id="overview"><div class="page-heading"><div><p class="eyebrow">' + bilingual('LOCAL EVIDENCE WORKSPACE', '本地实验工作台') + '</p><h1>' + bilingual(title_en, title_zh) + '</h1><p class="subtitle">' + bilingual('Understand the outcome. Follow the evidence. Decide what to change.', '看懂结果，追溯证据，再决定如何修改。') + '</p></div><span class="status-badge" data-tone="' + tone + '">' + esc(report['status'].replace('_', ' ')) + '</span></div>' + hero + notice + '<div class="stats-grid">' + first + second + third + fourth + '</div></section>'
     middle = comparison_html(out, report, trials) if kind == 'comparison' else checks_html(out, report) if checks else instructions_html(out, report) + ledger_html(report)
     experiment = {key: report.get(key) for key in ('task', 'requested_model', 'codex_version', 'snapshot_sha256', 'repeats', 'max_runs', 'max_tokens', 'timeout_seconds', 'protected_files', 'unit_mode', 'setup', 'cases')}

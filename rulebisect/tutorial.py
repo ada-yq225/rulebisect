@@ -15,10 +15,17 @@ _BASELINE = """# Label conventions
 Lowercase all labels. Preserve the original whitespace for every client.
 """
 
-_PROPOSAL = """# Label conventions
+_PROPOSALS = {
+    'fix': """# Label conventions
+
+Lowercase all labels. For the modern client, strip surrounding whitespace.
+For the legacy client, preserve the original whitespace. Keep internal whitespace for both clients.
+""",
+    'regression': """# Label conventions
 
 Lowercase all labels. Strip surrounding whitespace for every client.
-"""
+""",
+}
 
 _TASK = ('Implement normalize_label(value, client) in labels.py according to the '
          'repository label conventions. Both modern and legacy clients use this function.')
@@ -29,29 +36,46 @@ _SOURCE = '''def normalize_label(value: str, client: str) -> str:
 '''
 
 
-def _verifier(client, expected):
+def _verifier(client: str) -> str:
     # A frozen oracle runs outside the workspace. Load the actual implementation
     # by path from its working directory, so it also works after distribution.
+    # Each row gives the input, the modern result and the legacy result.
+    examples = [
+        ('  MiXeD  ', 'mixed', '  mixed  '),
+        ('\tLeFt', 'left', '\tleft'),
+        ('RiGhT\n', 'right', 'right\n'),
+        ('IN  NER', 'in  ner', 'in  ner'),
+        (' \t ', '', ' \t '),
+        ('', '', ''),
+    ]
+    checks = '\n'.join(f'    ({value!r}, {modern if client == "modern" else legacy!r}),'
+                       for value, modern, legacy in examples)
     return f'''from pathlib import Path
 import runpy
 import sys
 
+examples = [
+{checks}
+]
+
 try:
     normalize = runpy.run_path(str(Path.cwd() / "labels.py"))["normalize_label"]
-    actual = normalize("  MiXeD  ", {client!r})
+    for value, expected in examples:
+        actual = normalize(value, {client!r})
+        if actual != expected:
+            print(f"{client} label {{value!r}}: expected {{expected!r}}, got {{actual!r}}.")
+            sys.exit(1)
 except Exception as error:
     print("Could not exercise labels.py:", error)
     sys.exit(2)
-expected = {expected!r}
-if actual != expected:
-    print(f"Expected {{expected!r}}, got {{actual!r}} for the {client} client.")
-    sys.exit(1)
 print("Passed: {client} label contract")
 '''
 
 
-def create_tutorial(destination: Path) -> Path:
+def create_tutorial(destination: Path, *, proposal: str = 'fix') -> Path:
     """Create the baseline commit and working proposal in a strictly new directory."""
+    if proposal not in _PROPOSALS:
+        raise ValueError(f'Unknown tutorial proposal {proposal!r}. Choose fix or regression.')
     destination = Path(destination)
     if destination.exists() or destination.is_symlink():
         raise ValueError(f'Tutorial destination already exists: {destination}. Choose a new directory.')
@@ -66,8 +90,8 @@ def create_tutorial(destination: Path) -> Path:
               'repeats': 2, 'max_runs': 8, 'cases': [
                   {'id': 'modern'}, {'id': 'legacy', 'oracle': 'verify_legacy.py'}]}
     files = {'AGENTS.md': _BASELINE, 'labels.py': _SOURCE,
-             'verify_modern.py': _verifier('modern', 'mixed'),
-             'verify_legacy.py': _verifier('legacy', '  mixed  '),
+             'verify_modern.py': _verifier('modern'),
+             'verify_legacy.py': _verifier('legacy'),
              CONFIG_NAME: json.dumps(config, ensure_ascii=False, indent=2) + '\n',
              '.gitattributes': '* text eol=lf\n', '.gitignore': '__pycache__/\n*.pyc\n'}
     env = {key: value for key, value in os.environ.items() if not key.upper().startswith('GIT_')}
@@ -91,7 +115,7 @@ def create_tutorial(destination: Path) -> Path:
                                     capture_output=True, text=True, errors='replace', timeout=30)
             if result.returncode:
                 raise ValueError(f'Could not create tutorial Git baseline: {result.stderr.strip()}')
-        (repo / 'AGENTS.md').write_text(_PROPOSAL, encoding='utf-8', newline='\n')
+        (repo / 'AGENTS.md').write_text(_PROPOSALS[proposal], encoding='utf-8', newline='\n')
 
         # mkdir exclusively reserves the name on every platform. A simultaneous
         # tutorial cannot replace an empty directory created by another caller.

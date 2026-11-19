@@ -14,9 +14,9 @@ rulebisect report ../experiment-evidence/report.json --open
 rulebisect report --latest --repo /path/to/repository --open
 ```
 
-`report` reads saved JSON and regenerates the HTML, Markdown and compact Issue draft in the same evidence directory. It does not call Codex, run the verifier or create new trial observations. After upgrading RuleBisect, use it to refresh older reports. Keep the evidence directory together so local logs and diffs remain available. Rendering older evidence is supported; resuming an experiment across tool versions is not.
+`report` reads saved JSON and regenerates the HTML, Markdown and compact Issue draft in the same evidence directory. It does not call Codex, run the verifier or create new trial observations. After upgrading RuleBisect, use it to refresh older reports. Keep the evidence directory together so local logs and diffs remain available. Continuation verifies compatibility with the saved experiment and its evidence.
 
-`report` 从已保存的 JSON 重新生成同一证据目录中的 HTML、Markdown 和精简 Issue 草稿，不调用 Codex、不运行验证器，也不产生新试验结果。升级后可用它更新旧报告。请保留完整证据目录，确保日志与差异文件仍可访问；旧报告可以重新展示，但实验不能跨工具版本续跑。
+`report` 从已保存的 JSON 重新生成同一证据目录中的 HTML、Markdown 和精简 Issue 草稿，不调用 Codex、不运行验证器，也不产生新试验结果。升级后可用它更新旧报告。请保留完整证据目录，确保日志与差异文件仍可访问。续跑会检查原实验与已保存证据的兼容性。
 
 Pass a report directory or its `report.json`, **or** use `--latest`; do not combine both. `--latest` searches the selected repository's default `.rulebisect-runs/<repo-name>` history, not arbitrary custom output locations. Omit `--open` when you only want to regenerate files.
 
@@ -54,7 +54,7 @@ Diff colors distinguish additions, removals and headers; unchanged context stays
 - **Observed 1-minimal:** a smaller candidate reproduced the failure, and each tested single removal passed fresh repeated checks. It is a failing reproducer; prepare and compare a fix separately.
 - **Regression observed:** at least one originally passing task failed with the proposal. Improvements on other tasks do not erase that regression.
 - **No regressions observed:** the proposal passed every selected repetition with stable baselines. Unselected tasks and other environments are not covered.
-- **Inconclusive or interrupted:** the evidence is incomplete or inconsistent; do not treat a partial candidate as a confirmed result. Comparisons are rerun in a new output directory rather than resumed.
+- **Inconclusive or interrupted.** Results can be incomplete or inconsistent. A comparison stopped by its reported token limit can have its checkpoint verified before continuing. For variability, execution errors and manual interruptions, inspect the evidence and start a fresh comparison.
 - **Verifier checks:** exit 0 is a current-code pass, 1 is a behavioral failure that may be expected before implementation, and other results indicate setup or runtime problems. Executable verifiers do not establish that model behavior passed.
 
 缩减成功意味着找到更小的失败复现，仍需单独准备并验证修复。某项改善不会抵消其他任务的回退。通过只覆盖本次选定的任务与重复次数；中断、波动或预算不足不能当作已经确认的结果。验证器初始返回 1 可能符合预期，它与运行环境错误不同，也不意味着已经验证模型行为。
@@ -66,6 +66,20 @@ Source badges distinguish recorded Codex runs, deterministic simulations and ver
 Reported usage may be missing or partial. Cached input is already included in input tokens, not an additional total. The report makes no monetary estimate, causal proof, statistical-confidence claim or guarantee on unseen tasks.
 
 用量可能缺失或不完整；缓存输入已包含在输入 Token 中，不额外相加。报告不推算金额，也不证明因果关系、统计置信度或未测试任务的表现。
+
+## Continue a token-limited comparison / 从 Token 上限检查点继续
+
+From the **original project**, copy the command under **Next step** in the HTML or Markdown report. Replace `NEW_TOTAL` with an integer above both the previous token limit and the tokens already reported. The HTML shows the number to exceed. A comparison with a proposal directory also needs `--proposed` pointing to the original directory. If you used a custom configuration, add `--config PATH`.
+
+回到**原项目**，复制 HTML 或 Markdown 报告中“下一步”的命令。将 `NEW_TOTAL` 换成一个整数，同时高于原上限与已上报的累计用量。报告会显示需要超过的数值。使用目录提案时，通过 `--proposed` 指定原提案目录。使用自定义配置时，加上 `--config PATH`。
+
+```sh
+rulebisect compare --continue-from "../comparison evidence" --max-tokens NEW_TOTAL --plan
+```
+
+The plan validates the checkpoint against the current inputs and saved evidence and lists the calls still needed. It uses zero model calls. To execute the remaining trials with the chosen budget, remove `--plan`. The new report records how many trials it reused and how many it actually ran. It writes to a new evidence directory. For a token-limited 0.11.0 comparison, refresh the report with the current CLI to see the same guidance.
+
+计划会校验当前输入与保存的证据并列出剩余调用数，模型调用为零。确认新预算后，去掉 `--plan` 即可执行剩余试验。新报告在新的证据目录中显示沿用次数和本轮实际新增次数。对于因 Token 上限停止的 0.11.0 对照实验，使用新版 CLI 刷新报告即可看到续跑指引。
 
 ## Keep full evidence private; share aggregates / 完整证据与汇总分享
 

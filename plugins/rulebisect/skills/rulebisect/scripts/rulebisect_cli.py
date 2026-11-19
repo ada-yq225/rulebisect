@@ -53,7 +53,7 @@ from pathlib import Path
 
 RUNTIME_MODULES = (
     '__init__.py', '__main__.py', 'assertions.py', 'checks.py', 'cli.py',
-    'comparison.py', 'configuration.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
+    'comparison.py', 'comparison_resume.py', 'configuration.py', 'core.py', 'demo.py', 'experiment.py', 'history.py',
     'onboarding.py', 'report.py', 'report_ui.py', 'runner.py', 'setup.py',
     'review.py', 'revisions.py', 'share.py', 'status.py', 'suite.py', 'tutorial.py', 'ui.py',
 )
