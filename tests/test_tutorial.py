@@ -34,13 +34,50 @@ class TutorialTests(unittest.TestCase):
         self.assertIsNone(config.get('model'))
         self.assertEqual((config['repeats'], config['max_runs']), (2, 8))
         self.assertEqual([case['id'] for case in config['cases']], ['modern', 'legacy'])
-        def check(client):
-            return subprocess.run([sys.executable, '-I', str(self.target / f'verify_{client}.py')],
-                                  cwd=self.target, capture_output=True).returncode
-        self.assertEqual([check('modern'), check('legacy')], [1, 0])
-        (self.target / 'labels.py').write_text(
-            'def normalize_label(value, client):\n    return value.lower().strip()\n', encoding='utf-8')
-        self.assertEqual([check('modern'), check('legacy')], [0, 1])
+        self.assertEqual(self.git('show', 'HEAD:labels.py'), (self.target / 'labels.py').read_text())
+        instructions = (self.target / 'AGENTS.md').read_text()
+        self.assertIn('modern client, strip surrounding whitespace', instructions)
+        self.assertIn('legacy client, preserve the original whitespace', instructions)
+
+        regression = create_tutorial(self.root / 'regression', proposal='regression')
+        self.assertIn('Strip surrounding whitespace for every client', (regression / 'AGENTS.md').read_text())
+        baseline_tree = self.git('rev-parse', 'HEAD^{tree}').strip()
+        self.assertEqual(subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=regression,
+                                                 text=True).strip(), baseline_tree)
+        self.assertEqual(subprocess.check_output(['git', 'status', '--porcelain'], cwd=regression,
+                                                 text=True), ' M AGENTS.md\n')
+
+    def test_oracles_distinguish_implementations_in_an_independent_workspace(self):
+        create_tutorial(self.target, proposal='fix')
+        workspace = self.root / 'trial'
+        workspace.mkdir()
+        implementation = workspace / 'labels.py'
+
+        def verify(expected):
+            for client, exit_code in zip(('modern', 'legacy'), expected):
+                run = subprocess.run([sys.executable, '-I', str(self.target / f'verify_{client}.py')],
+                                     cwd=workspace, capture_output=True, text=True)
+                self.assertEqual(run.returncode, exit_code, f'{client}: {run.stdout}{run.stderr}')
+
+        implementation.write_bytes((self.target / 'labels.py').read_bytes())
+        verify((1, 0))
+        trials = [
+            ('value.strip().lower() if client == "modern" else value.lower()', (0, 0)),
+            ('value.strip().lower()', (0, 1)),
+            ('value.strip() if client == "modern" else value', (1, 1)),
+            ('value.strip(" ").lower() if client == "modern" else value.lower()', (1, 0)),
+            ('" ".join(value.lower().split()) if client == "modern" else value.lower()', (1, 0)),
+        ]
+        for expression, expected in trials:
+            with self.subTest(expression=expression):
+                implementation.write_text(f'def normalize_label(value, client):\n    return {expression}\n',
+                                          encoding='utf-8')
+                verify(expected)
+
+    def test_unknown_proposal_leaves_no_files(self):
+        with self.assertRaisesRegex(ValueError, 'Choose fix or regression'):
+            create_tutorial(self.target, proposal='typo')
+        self.assertEqual(list(self.root.iterdir()), [])
 
     def test_existing_paths_and_metadata_stay_untouched(self):
         self.target.mkdir()

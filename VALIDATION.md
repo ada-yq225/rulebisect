@@ -1,4 +1,10 @@
-# Validation — v0.11.0 / Codex Skill and plugin 0.5.0
+# Validation — v0.12.0 / Codex Skill and plugin 0.6.0
+
+On 2026-11-19, a local ChatGPT login ran four Codex trials using the requested model `gpt-6.2-sol`. Every trial checked the modern and legacy label contracts. The baseline preserved legacy whitespace and failed the modern contract twice. Both scoped-rule trials passed both contracts and produced identical patches to `labels.py`.
+
+The first trial ran with v0.11.0. A v0.12.0 release candidate verified its checkpoint and ran the remaining three trials. The combined report recorded 294,690 input tokens (244,992 cached) and 1,258 output tokens against a 400,000 reported-token threshold. Applying the observed patch to a fresh tutorial project passed both standalone verifiers. These observations cover this fixture and model.
+
+# Earlier validation — v0.11.0 / Codex Skill and plugin 0.5.0
 
 On 2026-11-18, the macOS checks used Python 3.11, local Git repositories, independent verifiers and simulations. They made zero real model calls.
 

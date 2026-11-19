@@ -61,6 +61,15 @@ compare --repo REPO --proposed NEW_PROPOSAL --model MODEL --repeats REPEATS --ma
 
 A focused comparison accepts `--cases CASE_ID ...`; the report explicitly lists omitted cases. Check the full suite before recommending a change meant to preserve all saved behavior. Do not increase the case scope or budget beyond authorization. Applying a proposal is a separate user-requested action; compare does not apply it.
 
+### Continue a comparison stopped at its token limit
+
+```text
+compare --repo REPO --continue-from PRIOR_EVIDENCE --max-tokens APPROVED_TOTAL_TOKENS --plan
+compare --repo REPO --continue-from PRIOR_EVIDENCE --max-tokens APPROVED_TOTAL_TOKENS --out NEW_EVIDENCE
+```
+
+Use the original repository and supply its original `--config PATH` if customized. Git revisions stay pinned to the recorded commits. For a directory proposal, add `--proposed DIR` to both commands to select the original proposal again. The higher token limit includes earlier reported usage. The plan uses zero model calls. A real continuation checks the inputs, reuses completed trials and executes the remainder into a new directory.
+
 ## Saved evidence and interrupted reductions
 
 ```text
@@ -70,7 +79,7 @@ share EVIDENCE --out NEW_SUMMARY.html
 resume --repo REPO --from EVIDENCE --model MODEL --repeats REPEATS --max-runs APPROVED_TOTAL_CAP --out NEW_EVIDENCE
 ```
 
-Resume uses matching tool version, settings and snapshot, reuses stable search evidence and performs fresh controls. Supply the same model, repeats and other overridden settings (such as timeout and unit mode) as the original run; it does not automatically import those options from the report. Its cap includes previous runs. Simulations, comparisons and verifier checks do not support resume; rerun them in a new directory when needed. Rendering old reports is supported and does not change the original recorded tool version or trial results.
+Resume uses matching tool version, settings and snapshot, reuses stable search evidence and performs fresh controls. Supply the same model, repeats and other overridden settings (such as timeout and unit mode) as the original run; it does not automatically import those options from the report. Its cap includes previous runs. Use `compare --continue-from` for a comparison that stopped at its reported-token limit. Rerun simulations and verifier checks in a new directory when needed. Rendering old reports is supported and does not change the original recorded tool version or trial results.
 
 Real run/compare exits 0 for `observed_1_minimal` or `no_regressions_observed`, and 2 for other reported statuses, including `not_reproduced`. Inspect the report rather than treating every exit 2 as an installation failure. A demo that correctly catches its constructed regression exits 0. Check --all exits 0 when verifiers execute with 0/1 outcomes and 2 for execution trouble, regardless of expected initial behavioral failures.
 

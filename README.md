@@ -10,7 +10,7 @@ Permanently free · MIT licensed · Codex only · Local-first · No telemetry. A
 
 ## See what it does — no Codex account needed
 
-Download [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect.pyz) and open a terminal in the download folder. The single file runs with Python 3.11+ and Git.
+Download [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.12.0/rulebisect.pyz) and open a terminal in the download folder. The single file runs with Python 3.11+ and Git.
 
 **macOS or Linux**
 
@@ -36,7 +36,9 @@ Try an editable example using a new directory name:
 rulebisect tutorial my-rule-review --open
 ```
 
-This creates a local Git repository with a committed baseline, a working-copy rule change and two configured cases. The offline review opens in your browser. Edit the rules in `my-rule-review`, then run `rulebisect review --open` inside it to review your edits. The tutorial requires Python 3.11+ and Git and uses zero model calls.
+The example opens a local review of a proposed `AGENTS.md` change. Both clients lowercase labels. The proposal tells Codex to trim surrounding spaces for modern clients and preserve them for legacy clients. Edit the rule and run `rulebisect review --open` inside the example to see what changed. The tutorial and review use zero model calls.
+
+To explore the regression, run `rulebisect tutorial broad-rule-review --proposal regression --open`. Its proposal trims spaces for every client, including legacy clients that rely on those spaces.
 
 In your own configured repository, edit a selected, tracked instruction file and run:
 
@@ -90,12 +92,12 @@ The initial check reports missing output as a behavior failure. Setup and verifi
 
 ## Install and run your own experiment
 
-Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.11.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.11.0) includes an installable wheel; the project is not on PyPI yet.
+Python 3.11+, Git, and an authenticated [Codex CLI](https://learn.chatgpt.com/docs/non-interactive-mode) are required for real experiments. The [v0.12.0 release](https://github.com/ada-yq225/rulebisect/releases/tag/v0.12.0) includes an installable wheel; the project is not on PyPI yet.
 
 For a release install, create and activate a virtual environment, then:
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect-0.11.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.12.0/rulebisect-0.12.0-py3-none-any.whl
 ```
 
 Or install from source:
@@ -218,7 +220,8 @@ Doctor validates the frozen-snapshot inputs, selected instruction files, verifie
 | `check` / `check --all` | Check one verifier or every suite case on initial snapshots | No |
 | `case add/list/remove` | Manage regression cases without editing JSON | No |
 | `run` | Run baseline, reduction and fresh confirmation | Yes |
-| `resume --from EVIDENCE` | Reuse matching stable search evidence in a new output directory | Yes |
+| `resume --from EVIDENCE` | Reuse matching stable search evidence for a reduction | Yes |
+| `compare --continue-from EVIDENCE` | Finish a comparison stopped by its reported-token limit | Yes, unless `--plan` |
 | `draft --out DIRECTORY` | Make an editable instruction copy; preserve the original baseline | No |
 | `review [--base-ref REF] [--proposed-ref REF]` | Preview Git instruction changes, cases and calls | No |
 | `compare --proposed DIRECTORY` | Repeat before/after checks across one task or a regression suite | Yes |
@@ -306,6 +309,17 @@ The report lists improvements, regressions, still-passing and still-failing task
 
 **Reduction's `candidate/` directory is a smaller failing reproducer, not a suggested fix.** Start with `draft`, edit the copies yourself, then compare. Do not edit the original instructions before comparison, or you change the baseline. Example: [instruction-regression](examples/instruction-regression).
 
+### Continue a comparison after its token limit
+
+From the original repository, give the previous evidence directory and a larger **total** reported-token limit. Start with the offline plan. The commands below assume a Git or working-tree proposal.
+
+```sh
+rulebisect compare --continue-from ../partial-comparison --max-tokens 120000 --plan
+rulebisect compare --continue-from ../partial-comparison --max-tokens 120000 --out ../continued-comparison
+```
+
+Use a total that fits your budget. It includes tokens already reported. RuleBisect checks the original inputs, reuses completed trials, and runs the remaining trials into a new directory. Git revisions use their recorded commit IDs. For a directory proposal, include `--proposed DIR` again. For a custom configuration, include the original `--config PATH`.
+
 ## Find evidence quickly
 
 ```sh
@@ -314,7 +328,7 @@ rulebisect report --latest --open
 rulebisect resume --latest --max-runs 100
 ```
 
-History reads summaries in the default `.rulebisect-runs/<repo-name>` directory, newest first, with no model calls. Broken reports are skipped with a warning. Latest resume selects a completed/interrupted Codex reduction, excluding checks, comparisons, simulations and running experiments; snapshot/version checks still apply. Custom `--out` directories need an explicit path. Comparisons can be rerun but are not resumable in this release.
+History reads summaries in the default `.rulebisect-runs/<repo-name>` directory, newest first, with no model calls. Broken reports are skipped with a warning. Latest resume selects a completed/interrupted Codex reduction, excluding checks, comparisons, simulations and running experiments; snapshot/version checks still apply. Custom `--out` directories need an explicit path.
 
 ## Prepare dependencies automatically
 
@@ -367,7 +381,7 @@ This means observed single-removal minimality, **not causal attribution, semanti
 
 Empty selected files remain present, affecting instruction fallback/loading. The tool does not prove each fragment was loaded or reconstruct all external context. Requested model and CLI version are recorded; provider routing and external environment are not guaranteed fixed.
 
-## Resume without silently reusing the wrong experiment
+## Resume a reduction
 
 ```sh
 rulebisect resume --from /old/evidence --max-runs 100

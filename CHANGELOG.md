@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0 / Skill and plugin 0.6.0 — Scoped rules and comparison continuation
+
+- The editable tutorial proposes trimming modern labels while preserving legacy whitespace. Both clients keep internal spacing and lowercase their labels. Use `tutorial --proposal regression` to reproduce the earlier global-trimming example.
+- Continue a comparison that stopped between trials at its reported-token threshold. `compare --continue-from EVIDENCE --max-tokens NEW_TOTAL --plan` verifies the earlier evidence and shows the remaining calls. Execution preserves the original report and carries prior usage into the new total.
+
 ## 0.11.0 / Skill and plugin 0.5.0 — Git instruction reviews
 
 - Run `rulebisect review` to see how selected working rules differ from HEAD. Use local revisions or a proposed directory, inspect the unified diff, and preview case selection and planned calls in the terminal, JSON or offline HTML.

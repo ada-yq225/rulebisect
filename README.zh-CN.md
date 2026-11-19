@@ -10,7 +10,7 @@
 
 ## 先看效果：无需 Codex 账户
 
-下载 [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect.pyz)，在下载目录打开终端。有 Python 3.11 或更高版本和 Git，就能直接运行这个文件。
+下载 [rulebisect.pyz](https://github.com/ada-yq225/rulebisect/releases/download/v0.12.0/rulebisect.pyz)，在下载目录打开终端。有 Python 3.11 或更高版本和 Git，就能直接运行这个文件。
 
 **macOS 或 Linux**
 
@@ -36,7 +36,9 @@ py -3.11 -I rulebisect.pyz demo --scenario regression --open
 rulebisect tutorial my-rule-review --open
 ```
 
-这个本地 Git 仓库包含一次基线提交、工作区的规则改动和两个已配置的用例。浏览器会打开离线审查页。编辑 `my-rule-review` 中的规则，在该目录再次运行 `rulebisect review --open` 即可查看自己的改动。教程只需 Python 3.11+ 和 Git，模型调用数为零。
+浏览器会打开本地示例的 `AGENTS.md` 审查页。两个客户端都将标签转成小写。默认提案要求现代客户端去掉首尾空白，旧版客户端保留首尾空白。修改规则后，在示例目录运行 `rulebisect review --open` 即可查看差异。教程和审查均不调用模型。
+
+想看一次会破坏兼容性的修改，可运行 `rulebisect tutorial broad-rule-review --proposal regression --open`。这份提案要求所有客户端去掉首尾空白，会破坏旧版依赖的行为。
 
 在自己的已配置仓库中，修改一个已选中且由 Git 跟踪的指令文件，然后运行：
 
@@ -90,12 +92,12 @@ codex plugin marketplace add ada-yq225/rulebisect
 
 ## 安装并检查自己的仓库
 
-需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.11.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.11.0)提供安装包，项目暂未上架 PyPI。
+需要 Python 3.11+ 和 Git。真实实验还需安装并登录 Codex CLI。[v0.12.0 发布页](https://github.com/ada-yq225/rulebisect/releases/tag/v0.12.0)提供安装包，项目暂未上架 PyPI。
 
 创建并激活虚拟环境后，可以直接安装发布版：
 
 ```sh
-python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.11.0/rulebisect-0.11.0-py3-none-any.whl
+python -m pip install https://github.com/ada-yq225/rulebisect/releases/download/v0.12.0/rulebisect-0.12.0-py3-none-any.whl
 ```
 
 或者从源码安装：
@@ -238,7 +240,8 @@ rulebisect compare --proposed ../proposed-rules --cases existing-feature --open
 | `check` / `check --all` | 检查单个或全部验证器环境 | 否 |
 | `case add/list/remove` | 无需编辑 JSON 管理回归用例 | 否 |
 | `run` | 重复运行、删减指令、重新确认 | 是 |
-| `resume --from 旧报告目录` | 复用匹配快照的稳定搜索结果，重新运行基线与最终确认 | 是 |
+| `resume --from 旧报告目录` | 继续缩减实验，复用稳定搜索结果 | 是 |
+| `compare --continue-from 旧报告目录` | 继续因已上报 Token 达到上限而停止的对照实验 | 是，`--plan` 除外 |
 | `draft --out 目录` | 复制指令供修改，保持原仓库规则作为基线 | 否 |
 | `review [--base-ref 版本] [--proposed-ref 版本]` | 预览 Git 规则修改、用例和调用次数 | 否 |
 | `compare --proposed 目录` | 对比规则修改前后的任务结果 | 是 |
@@ -255,7 +258,7 @@ Token 上限不是费用上限；单次调用可能越过它，缺失的用量�
 
 默认每组重复 3 次；允许 `--repeats 2` 做较小实验。预算不足时输出“暂无法判断”，不会省略最终确认而宣称定位成功。
 
-## 继续中断的实验
+## 继续缩减实验
 
 保持原仓库内容、配置角色、模型、Codex CLI 版本、工具版本、拆分方式、重复次数与超时一致：
 
@@ -264,6 +267,17 @@ rulebisect resume --from /旧证据目录 --max-runs 100
 ```
 
 `max-runs` 是**包含旧运行的总次数上限**。续跑生成新的证据目录，保留旧日志；只复用已完成且稳定的搜索组，基线和最终确认会重新执行。快照或关键设置变化时拒绝复用。其他外部环境变化仍可能影响结果，因此复用不能证明整个环境完全一致。
+
+## 对照实验达到 Token 上限后怎样继续
+
+在原仓库中指定旧证据目录和更高的**累计 Token 上限**，先预览，再运行。以下示例适用于 Git 版本或工作区提案。
+
+```sh
+rulebisect compare --continue-from ../partial-comparison --max-tokens 120000 --plan
+rulebisect compare --continue-from ../partial-comparison --max-tokens 120000 --out ../continued-comparison
+```
+
+按自己的预算填写总上限，其中包括上一轮已上报的用量。工具核对原始输入，复用已完成的试验，在新目录记录余下试验。Git 版本使用原来记录的提交 ID。如果提案存在独立目录，两条命令都要加上 `--proposed 目录`。使用过自定义配置时，再次传入原来的 `--config 路径`。
 
 ## 读懂报告与分享结果
 
@@ -335,7 +349,7 @@ rulebisect report --latest --open
 rulebisect resume --latest --max-runs 100
 ```
 
-历史记录只读取默认 `.rulebisect-runs/<仓库名>` 目录，不调用模型；损坏报告会提示并跳过。最近续跑会排除检查、对照实验、模拟和仍在运行的实验，继续校验快照和版本。使用自定义 `--out` 时仍需指定路径；本版对照实验可重新运行，暂不支持续跑。
+历史记录只读取默认 `.rulebisect-runs/<仓库名>` 目录，不调用模型；损坏报告会提示并跳过。最近续跑会排除检查、对照实验、模拟和仍在运行的实验，继续校验快照和版本。使用自定义 `--out` 时仍需指定路径。
 
 ## 自动准备依赖
 

@@ -13,4 +13,8 @@ rulebisect compare --config experiment.json --proposed proposed --model YOUR_MOD
 
 Planned calls: 2 tasks × 2 instruction variants × 2 repetitions = 8. Real calls use your local Codex account. Instructions and code in the original copy remain unchanged. Model outcomes may vary; mixed/error outcomes must remain inconclusive. Neither the fixture nor finite observations establish causality or general effectiveness.
 
-The proposed rule is intentionally broad. A more targeted proposal could scope whitespace conventions separately to the modern and compatibility APIs; use `draft` and edit a new copy, then compare again.
+The `proposed/` rule applies trimming to every client. The `fixed/` rule scopes trimming to `labels.py` and preserves surrounding whitespace in `compatibility.py`. Preview the fixed comparison with:
+
+```sh
+rulebisect compare --config experiment.json --proposed fixed --model YOUR_MODEL_ID --plan
+```

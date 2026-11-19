@@ -70,7 +70,48 @@ def add_experiment_options(parser):
     parser.add_argument('--unit-mode', choices=['paragraph', 'section', 'file'])
 
 
+def restore_compare_options(args):
+    from .comparison_resume import read_prior_report
+
+    if args.max_tokens is None:
+        raise ValueError('Pass --max-tokens with the new total token threshold for this comparison.')
+    prior = read_prior_report(args.continue_from)
+    if prior.get('kind') != 'comparison':
+        raise ValueError('Choose a comparison report for --continue-from.')
+    selection = prior.get('case_selection')
+    cases = selection.get('selected') if isinstance(selection, dict) else None
+    if not isinstance(cases, list) or not cases or not all(isinstance(case, str) for case in cases):
+        raise ValueError('Previous comparison has invalid case selection.')
+    if args.cases is None:
+        args.cases = cases
+    for flag, field, kind in [('repeats', 'repeats', int), ('max_runs', 'max_runs', int),
+                              ('timeout', 'timeout_seconds', int), ('unit_mode', 'unit_mode', str)]:
+        saved = prior.get(field)
+        if type(saved) is not kind:
+            raise ValueError(f'Previous comparison has invalid {field}.')
+        if getattr(args, flag) is None:
+            setattr(args, flag, saved)
+    if args.model is None:
+        args.model = prior.get('requested_model')
+        if args.model is not None and not isinstance(args.model, str):
+            raise ValueError('Previous comparison has an invalid model.')
+    sources = prior.get('instruction_sources')
+    for arm, flag in [('baseline', 'base_ref'), ('candidate', 'proposed_ref')]:
+        source = sources.get(arm) if isinstance(sources, dict) else None
+        if not isinstance(source, dict):
+            raise ValueError(f'Previous comparison is missing its {arm} rule source.')
+        if source.get('kind') == 'git' and getattr(args, flag) is None:
+            commit = source.get('commit')
+            if not isinstance(commit, str) or len(commit) not in (40, 64) or any(c not in '0123456789abcdef' for c in commit):
+                raise ValueError(f'Previous {arm} Git commit is invalid.')
+            setattr(args, flag, commit)
+        elif source.get('kind') == 'directory' and arm == 'candidate' and args.candidate is None:
+            raise ValueError('Re-select your original proposal directory with --proposed DIRECTORY.')
+
+
 def experiment_from(args):
+    if getattr(args, 'continue_from', None) is not None:
+        restore_compare_options(args)
     repo = git_root(args.repo)
     config_path = args.config or repo / CONFIG_NAME
     config = load_configuration(config_path)
@@ -90,7 +131,8 @@ def experiment_from(args):
     if args.command in ('review', 'compare'):
         return Comparison(repo, config, out, model, repeats, max_runs, timeout, args.candidate,
                           max_tokens=max_tokens, base_ref=args.base_ref, proposed_ref=args.proposed_ref,
-                          expected_inputs=getattr(args, 'expect_inputs', None))
+                          expected_inputs=getattr(args, 'expect_inputs', None),
+                          continue_from=getattr(args, 'continue_from', None))
     return Experiment(repo, config, out, model, repeats, max_runs, timeout,
                       resume_from=resume_from, max_tokens=max_tokens)
 
@@ -228,6 +270,8 @@ def main(argv=None) -> int:
     add_experiment_options(compare)
     compare.add_argument('--plan', action='store_true', help='Validate and show exact planned calls without Codex or artifacts')
     compare.add_argument('--expect-inputs', metavar='SHA256', help='Require the same snapshot, cases and settings as a saved review')
+    compare.add_argument('--continue-from', type=Path, metavar='EVIDENCE',
+                         help='Reuse completed trials after a token-threshold stop. Pass a larger --max-tokens total.')
     review = commands.add_parser('review', help='Preview a Git instruction change and plan a comparison without calling Codex')
     add_experiment_options(review)
     review.add_argument('--json', action='store_true', help='Emit machine-readable plan and follow-up argv')
@@ -244,6 +288,8 @@ def main(argv=None) -> int:
     tutorial = commands.add_parser('tutorial', help='Create an editable sample Git project with a two-case instruction review')
     tutorial.add_argument('directory', nargs='?', type=Path, default=Path('my-rule-review'), help='New project directory')
     tutorial.add_argument('--open', action='store_true', help='Open its offline review')
+    tutorial.add_argument('--proposal', choices=['fix', 'regression'], default='fix',
+                          help='Select the scoped compatibility fix (default) or reproduce the broad-rule regression')
     case = commands.add_parser('case', help='Save, list and remove regression cases without editing JSON')
     case_commands = case.add_subparsers(dest='case_command', required=True)
     for name in ('list', 'add', 'remove'):
@@ -276,7 +322,7 @@ def main(argv=None) -> int:
             check_git_environment()
         if args.command == 'tutorial':
             from .tutorial import create_tutorial
-            project = create_tutorial(args.directory)
+            project = create_tutorial(args.directory, proposal=args.proposal)
             print(f'Tutorial project: {project}\nEdit {project / "AGENTS.md"} to try another proposal.')
             return main(['review', '--repo', str(project), *(['--open'] if args.open else [])])
         if args.command == 'status':
@@ -484,7 +530,7 @@ def main(argv=None) -> int:
                 return (1 if args.require_pass and code == 1 else 0) if code in (0, 1) else 2
             if not experiment.model:
                 raise ValueError('Choose --model MODEL, or save model with init --model MODEL.')
-            print(f'Using your local Codex login. Model: {experiment.model}; total run cap: {experiment.max_runs}.\nEvidence: {out}', flush=True)
+            print(f'Local Codex CLI. Model: {experiment.model}. Total run cap: {experiment.max_runs}.\nEvidence: {out}', flush=True)
             report = experiment.execute()
         print(f"\n{report['status']}: {report['message']}\nReport: {out.resolve() / 'report.html'}")
         if getattr(args, 'open', False):

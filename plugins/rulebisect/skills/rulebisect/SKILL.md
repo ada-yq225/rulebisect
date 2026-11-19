@@ -21,7 +21,7 @@ Use the requested repository explicitly via `--repo`. Default experiment evidenc
 
 ## Select the user's workflow
 
-- **First look:** run `demo --scenario regression --out NEW_DEMO` with a new local directory outside the user's repository. It takes eight deterministic simulation executions and zero model calls. Add `--open` only when opening the report is useful and supported. Label it as a constructed simulation.
+- **First look:** run `demo --scenario regression --out NEW_DEMO` with a new local directory outside the user's repository. It takes eight deterministic simulation executions and zero model calls. Add `--open` only when opening the report is useful and supported. Label it as a constructed simulation. For an editable project, use `tutorial NEW_DIR --open`. Its default proposal trims only modern labels. Use `--proposal regression` to explore a rule that also trims legacy labels. Both tutorial modes use zero model calls.
 - **Existing evidence:** read its `report.json` and the specific verifier logs or diffs needed to explain the result. `report PATH` refreshes offline views; `share PATH --out NEW.html` creates an aggregate summary. Neither calls a model. Do not start a new experiment merely to explain a saved result.
 - **A reproducible failure:** establish a concrete task, selected instruction files and an independent pass/fail check; then prepare and validate the experiment. Read [references/experiments.md](references/experiments.md) for commands and exit meanings.
 - **A proposed rule change:** for rules already edited in a Git repository, use `review --repo REPO --json` to compare HEAD with the working tree. For committed proposals select both revisions. Review the changed files, selected cases and required calls. The returned `next_argv` pins commits and verifies the reviewed inputs. Choose a model and use the bundled launcher when executing within the agreed budget. For separate rule copies, `draft` and directory comparisons remain available. Read [references/experiments.md](references/experiments.md). An improvement on one case must not hide a regression on another.
@@ -44,6 +44,8 @@ Use `check --require-pass` only when the requested contract must already pass or
 
 `run`, `compare` without `--plan`, and `resume` invoke fresh Codex processes using the user's existing login and quota or billing. Before these calls, establish the repository, task, requested/saved model, repeats and total execution budget. Show the planned comparison calls, or the reduction's execution cap. Proceed when this session already authorizes that task and budget; otherwise ask once for the missing authorization. Never raise the cap or keep retrying after an uncertain outcome without authorization for the additional calls.
 
+If a real comparison stopped at its reported-token limit, use `compare --continue-from EVIDENCE --max-tokens APPROVED_TOTAL --plan` in the original repository to preview remaining work. For the actual continuation, use a new output directory and an authorized cumulative limit. Follow the source and configuration options in [references/experiments.md](references/experiments.md).
+
 A reported-token cap is checked between calls, is incomplete when usage is missing, and is not a monetary spending limit. Do not infer price from token counts. Respect the user's requested model rather than substituting one.
 
 Leave the original instruction baseline unchanged during the experiment. The tool uses fresh local repository copies and protected checks; these are not containers. Saved setup/check commands can still access resources allowed by the environment. Stop on environment failures and report them rather than weakening protection or verification.
@@ -55,7 +57,7 @@ Read [references/evidence.md](references/evidence.md) when interpreting results,
 - `observed_1_minimal`: a smaller candidate repeatedly failed and each tested single removal passed. The candidate is a **failing reproducer**, not a repair or proven global minimum.
 - `regressions_observed`: at least one originally passing task failed with the proposal. Inspect that case before recommending application.
 - `no_regressions_observed`: every selected proposed case passed its repetitions; unselected tasks and other environments remain untested.
-- `candidate_failed`, `not_reproduced`, `control_failed`, `inconclusive` and `interrupted`: explain the actual evidence and limitation. Do not convert them into success. Comparison/check runs cannot be resumed; reduction resume requires matching tool version, snapshot and settings.
+- `candidate_failed`, `not_reproduced`, `control_failed`, `inconclusive` and `interrupted`: explain the actual evidence and limitation. Do not convert them into success. Use comparison continuation only for a recorded token-limit stop. Reduction resume requires matching tool version, snapshot and settings.
 
 Return the status, cases/scope, repeat and run counts, source (Codex/simulation/verifier only), relevant local report or evidence paths, and a practical next action. Distinguish proposed instruction edits from an applied fix. Viewing a report does not apply a change.
 

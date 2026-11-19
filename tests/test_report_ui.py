@@ -4,12 +4,14 @@ from __future__ import annotations
 import copy
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
+import shlex
 import tempfile
 import unittest
 from urllib.parse import unquote, urlsplit
 
-from rulebisect.report import write_report
+from rulebisect.report import TOKEN_STOP, write_report
 from rulebisect.share import export_summary
 
 
@@ -294,6 +296,57 @@ class ReportUiTests(unittest.TestCase):
         text = overview.text().lower()
         self.assertIn('compare', text)
         self.assertNotIn('rulebisect resume', text)
+        self.assertIsNone(document.by_id('continuation-command'))
+
+    def test_reported_token_stop_offers_an_offline_plan_from_original_project(self):
+        self.out = self.root / "project's saved evidence $old"
+        self.out.mkdir()
+        report = self.comparison(status='inconclusive')
+        report.update(stop_reason='token_cap', max_tokens=300,
+                      instruction_sources={'candidate': {'kind': 'directory', 'path': 'previous proposal'}})
+        document = self.render(report)
+        self.assert_semantics(document)
+        self.assert_local_resources(document)
+        overview = document.by_id('overview').text()
+        self.assertIn('From the original project', overview)
+        self.assertIn('above 420', overview)
+        self.assertIn('大于 420', overview)
+        command = document.by_id('continuation-command').text()
+        if os.name == 'nt':
+            self.assertIn("'" + str(self.out).replace("'", "''") + "'", command)
+        else:
+            self.assertEqual(shlex.split(command), ['rulebisect', 'compare', '--continue-from', str(self.out),
+                             '--max-tokens', 'NEW_TOTAL', '--proposed', 'ORIGINAL_PROPOSAL_DIRECTORY', '--plan'])
+        self.assertIn('    ' + command, (self.out / 'report.md').read_text(encoding='utf-8'))
+        self.assertNotIn(str(self.out), (self.out / 'issue.md').read_text(encoding='utf-8'))
+
+    def test_only_known_legacy_token_stop_and_explicit_token_checkpoints_offer_plan(self):
+        report = self.comparison(status='inconclusive')
+        report.update(version='0.11.0', message=TOKEN_STOP, max_tokens=200)
+        eligible = self.render(report).by_id('continuation-command')
+        self.assertIsNotNone(eligible)
+        self.assertNotIn('--proposed ', eligible.text())
+        for changes in ({'version': '0.10.0'}, {'message': TOKEN_STOP + ' Extra.'},
+                        {'status': 'interrupted'}, {'runner': 'simulation'},
+                        {'stop_reason': 'error'}, {'stop_reason': None}, {'max_tokens': None}):
+            with self.subTest(changes=changes):
+                self.assertIsNone(self.render(dict(report, **changes)).by_id('continuation-command'))
+
+    def test_continued_reports_count_new_observations_from_the_actual_ledger(self):
+        report = self.comparison()
+        report['continuation'] = {'reused_trials': 3, 'remaining_calls': 5, 'source': 'prior evidence',
+                                  'previous_max_tokens': 200, 'reported_tokens_before': 315, 'report_sha256': 'a' * 64}
+        document = self.render(report)
+        overview = document.by_id('overview').text()
+        for text in ('3 reused · 1 newly recorded', '沿用 3 次 · 本轮新增 1 次'):
+            self.assertIn(text, overview)
+            self.assertIn(text, (self.out / 'report.md').read_text(encoding='utf-8'))
+        self.assertIsNone(document.by_id('continuation-command'))
+        self.assertNotIn('5 newly recorded', overview)
+        for invalid in (-1, 10, True, '3'):
+            with self.subTest(invalid=invalid):
+                report['continuation']['reused_trials'] = invalid
+                self.assertNotIn('newly recorded', self.render(report).by_id('overview').text())
 
     def test_simulation_unknown_usage_and_omitted_cases_stay_explicit(self):
         trial = self.trial(1, codex={})
